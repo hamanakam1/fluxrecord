@@ -1,0 +1,28 @@
+---
+name: Security Vulnerability
+about: Report a security vulnerability
+title: "[Security]: "
+labels: ["security", "confidential"]
+assignees: ""
+---
+
+## Vulnerability Description
+A clear description of the vulnerability.
+
+## Impact
+Describe the potential impact.
+
+## Affected Versions
+Which versions are affected?
+
+## Proof of Concept (Optional)
+Steps to reproduce or PoC (keep minimal, no sensitive data).
+
+## Suggested Fix (Optional)
+If you have a fix in mind, describe it.
+
+---
+
+## Confidentiality
+**Please do not disclose this publicly until we've had a chance to address it.**
+We will coordinate disclosure timing with you.

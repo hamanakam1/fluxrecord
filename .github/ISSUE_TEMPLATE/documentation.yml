@@ -1,0 +1,33 @@
+---
+name: Documentation Improvement
+about: Suggest improvements to documentation
+title: "[Docs]: "
+labels: ["documentation", "triage"]
+assignees: ""
+---
+
+## What needs improvement?
+Describe what documentation is missing, unclear, or incorrect.
+
+## Suggested Changes
+Describe the changes you'd like to see.
+
+## Target Audience
+Who would benefit from this change?
+- [ ] New users
+- [ ] Contributors
+- [ ] API consumers
+- [ ] Operators
+
+## Suggested Location
+Where should this be added/changed?
+- [ ] README.md
+- [ ] SPEC.md
+- [ ] CONTRIBUTING.md
+- [ ] Code docstrings
+- [ ] API reference (generated)
+- [ ] Architecture docs (docs/architecture/)
+- [ ] CLI help text (--help)
+
+## Additional Context
+Any additional context, examples, or references.

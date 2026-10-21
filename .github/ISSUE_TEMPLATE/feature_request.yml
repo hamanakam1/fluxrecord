@@ -1,0 +1,39 @@
+---
+name: Feature Request
+about: Suggest an idea for this project
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: ""
+---
+
+## Problem Statement
+A clear and concise description of the problem this feature would solve.
+Is your feature request related to a problem? Please describe.
+
+## Proposed Solution
+A clear and concise description of what you want to happen.
+
+## Alternative Solutions
+A clear and concise description of any alternative solutions or features you've considered.
+
+## Use Cases
+Describe the specific use cases this feature would enable:
+- Use case 1
+- Use case 2
+- Use case 3
+
+## Implementation Ideas (Optional)
+If you have implementation ideas, share them here:
+- Implementation approach
+- API design considerations
+- Backwards compatibility concerns
+
+## Additional Context
+Add any other context, mockups, or references here.
+
+---
+
+## Checklist
+- [ ] I have searched existing issues and discussions
+- [ ] This aligns with fluxrecord's scope (local-first coordination ledger)
+- [ ] I'm willing to contribute implementation if accepted

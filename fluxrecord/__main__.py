@@ -149,8 +149,10 @@ def main() -> None:
             return
 
         if a.command == "init":
+            from .ascii_art import get_art
             result = {"schema": 1, "status": "ready", "dispatch_enabled": False}
             print(json.dumps(result, indent=2, ensure_ascii=False))
+            print(get_art("small"), file=sys.stderr)
             return
 
         ledger = Ledger(a.db)
