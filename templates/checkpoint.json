@@ -1,0 +1,10 @@
+{
+  "session_id": "abc123",
+  "sequence": 1,
+  "summary": "Implemented token issuance endpoint",
+  "evidence": "Diff abc123; POST /api/auth/login returns access+refresh pair",
+  "next_step": "Implement refresh rotation",
+  "tokens": 1200,
+  "created_at": "2026-10-21T15:00:00Z",
+  "evidence_hash": "sha256:..."
+}

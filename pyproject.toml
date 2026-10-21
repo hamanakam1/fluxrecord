@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fluxrecord"
+version = "0.1.0"
+description = "Local coordination ledger — bounded context, explicit ownership, visible failures"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Michael Hamanaka"}]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Shells",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "hypothesis>=6.90",
+    "mypy>=1.8",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/hamanakam1/fluxrecord"
+Repository = "https://github.com/hamanakam1/fluxrecord"
+Issues = "https://github.com/hamanakam1/fluxrecord/issues"
+
+[project.scripts]
+flux = "fluxrecord.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fluxrecord*"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "UP", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["fluxrecord"]
+omit = ["tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "raise NotImplementedError"]
+show_missing = true
