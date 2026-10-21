@@ -1,11 +1,11 @@
 # fluxrecord
 
 ```text
-FFFFF  L      U   U  XX  XX RRRR   EEEEE CCCC  OOO  RRRR   DDDD
-F      L      U   U   XXXX   R   R  E     C     O   O R   R  D   D
-FFF    L      U   U    XX    RRRR   EEE   C     O   O RRRR   D   D
-F      L      U   U    XX    R  R   E     C     O   O R  R   D   D
-F      LLLLL  UUU     XX     R   R  EEEEE  CCCC  OOO  R   R  DDDD
+▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓      ▓▓  ▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓
+▓▓         ▓▓        ▓▓      ▓▓  ▓▓   ▓▓  ▓▓        ▓▓        ▓▓   ▓▓  ▓▓   ▓▓  ▓▓   ▓▓
+▓▓▓▓▓▓     ▓▓        ▓▓      ▓▓  ▓▓▓▓▓▓   ▓▓▓▓▓▓    ▓▓▓▓▓▓    ▓▓▓▓▓▓   ▓▓▓▓▓▓   ▓▓   ▓▓
+▓▓         ▓▓        ▓▓      ▓▓  ▓▓   ▓▓  ▓▓        ▓▓        ▓▓  ▓▓   ▓▓  ▓▓   ▓▓   ▓▓
+▓▓         ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓   ▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓   ▓▓  ▓▓   ▓▓  ▓▓   ▓▓
 ```
 
 **Less repeated context. More accepted work. Visible failures.**
