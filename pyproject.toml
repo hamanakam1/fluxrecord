@@ -31,6 +31,7 @@ dev = [
     "mypy==2.4.0",
     "ruff==0.17.1",
     "coverage==7.10.7",
+    "jsonschema==4.25.1",
 ]
 
 [project.urls]

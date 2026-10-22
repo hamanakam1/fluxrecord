@@ -186,7 +186,8 @@
         "checkpoint": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "session": {
       "type": "object",

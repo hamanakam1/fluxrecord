@@ -77,6 +77,38 @@ class WireTest(unittest.TestCase):
                 shape,
             )
 
+    def test_the_real_output_validates_against_the_published_schema(self):
+        """The published schema, checked against what the code emits.
+
+        `jsonschema` is used when it is installed, because a schema
+        checked by a hand-written checker is only as trustworthy as the
+        author's understanding of JSON Schema.
+        """
+        published = json.loads(
+            (
+                Path(__file__).resolve().parent.parent / "docs" / "wire-format.schema.json"
+            ).read_text()
+        )
+        packet = self.ledger.pack("M-1")["packet"]
+        ticket = self.ledger.task_view("M-1")
+        try:
+            from jsonschema import Draft202012Validator
+        except ImportError:
+            self.assertTrue(wire.validate("packet", packet))
+            self.assertTrue(wire.validate("ticket", ticket))
+            return
+        for definition, instance in (("packet", packet), ("ticket", ticket)):
+            fragment = {
+                "$schema": published["$schema"],
+                "$ref": f"#/$defs/{definition}",
+                "$defs": published["$defs"],
+            }
+            errors = sorted(
+                Draft202012Validator(fragment).iter_errors(instance),
+                key=lambda error: list(error.path),
+            )
+            self.assertEqual(errors, [], f"{definition}: {[e.message for e in errors]}")
+
     def test_the_published_schema_is_valid_json(self):
         published = json.loads(
             (
