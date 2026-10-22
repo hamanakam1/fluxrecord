@@ -32,6 +32,12 @@ jobs:
       - name: Boundary check
         run: python3 -m unittest tests.test_boundaries -v
 
+      - name: Specification check
+        run: python3 -m unittest tests.test_spec_conformance -v
+
+      - name: Output shape check
+        run: python3 -m unittest tests.test_no_null_keys -v
+
       - name: Report coverage
         run: |
           python -c "import pathlib, site; pathlib.Path(site.getsitepackages()[0], 'coverage.pth').write_text('import coverage; coverage.process_startup()')"

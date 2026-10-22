@@ -33,6 +33,12 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   decision produces, the failure taxonomy, the ticket schema, and the
   command list in both directions. The standard is the product, and it had
   drifted from the code five separate times.
+- **No key is always null.** `tests/test_no_null_keys.py` exercises the
+  ledger in every state a ticket can be in, collects every value every
+  report produces, and fails if any key is null in all of them. A key that
+  is null sometimes is fine; one that is null always is a promise the tool
+  cannot keep. `token_count` and `quality_estimate` are gone with it — they
+  could never carry a value.
 
 ### Changed
 

@@ -53,7 +53,9 @@ class DetailTest(unittest.TestCase):
         self.assertEqual(self.ledger.scope_conflicts("M-1"), [])
 
     def test_show_reports_the_active_session(self):
-        self.assertIsNone(self.ledger.show("M-1")["active_session"])
+        # The key is removed rather than null when there is no active
+        # session: a key that is always null is worse than an absent key.
+        self.assertNotIn("active_session", self.ledger.show("M-1"))
         started = self.ledger.start("M-1", "terminal-1")
         show = self.ledger.show("M-1")
         self.assertEqual(show["active_session"]["id"], started["session_id"])

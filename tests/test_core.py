@@ -155,7 +155,7 @@ class LedgerTest(unittest.TestCase):
         result = self.l.route("a")
         self.assertFalse(result["execution_authorized"])
         self.assertEqual([r["profile"] for r in result["options"] if r["eligible"]], ["local"])
-        self.assertTrue(all(r["quality_estimate"] is None for r in result["options"]))
+        self.assertTrue(all("quality_estimate" not in r for r in result["options"]))
 
     def test_failure_recurrence_and_event_cursor(self):
         for _ in range(2):

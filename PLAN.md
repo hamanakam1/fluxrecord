@@ -357,6 +357,7 @@ checkable by a machine, because a gate that needs judgement gets skipped.
 | Style | — | `ruff check` + `ruff format --check` | blocks the merge |
 | Boundary | — | `ast` import-graph check | blocks the merge |
 | Specification | — | the spec parsed and compared with the code | blocks the merge |
+| Output shape | — | no key that is always null | blocks the merge |
 | Documentation | — | a test that every command appears in the README | blocks the merge |
 
 The property-based tests are the interesting ones, because they cover the
@@ -612,11 +613,17 @@ Not a backlog. A starting point, in the order they should be taken.
    specification says it, the code now does it, and
    `tests/test_spec_conformance.py` keeps them together.
 
-2. **Remove the keys that are always null.**
+2. ~~**Remove the keys that are always null.**~~
    Objective: every JSON key is either populated or gone. Acceptance: no
    output contains a hardcoded `null` that no code path can change; the
    metrics section either computes cash cost from the profiles or is removed.
    Scope: `repo/core`. Budget: 2000 tokens.
+   **Shipped.** `measured_cash_cost`, `measured_token_savings`, `token_count`
+   and `quality_estimate` are gone — none of them could ever carry a
+   value. `tests/test_no_null_keys.py` exercises the ledger in every state a
+   ticket can be in, collects every value every report produces, and fails
+   if any key is null in all of them. A key that is null *sometimes* is
+   fine; one that is null always is a promise the tool cannot keep.
 
 3. ~~**Enforce the core's boundary in CI.**~~
    Objective: "the core opens no socket and runs no subprocess" is checked,
