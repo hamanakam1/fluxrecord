@@ -168,7 +168,7 @@ class IntakeTest(unittest.TestCase):
             "issues",
             {"number": 2, "title": "Two", "body": "", "state": "open"},
         )
-        result = intake(self.ledger, self.sync, "owner/repo")
+        intake(self.ledger, self.sync, "owner/repo")
         ids = sorted(task["id"] for task in self.ledger.status()["tasks"])
         self.assertEqual(ids, ["M-000001", "M-000002"])
 
