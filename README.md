@@ -565,7 +565,9 @@ flux pack M-397001 --since sha256:07b5a274...
 
 That is where *less repeated context* stops being a slogan and becomes a
 number: the delta is smaller than the packet, and the saving is the
-difference.
+difference. The delta says what changed — the checkpoints that landed, the
+failures that were recorded, the context that was attached — and whether
+the ticket itself moved.
 
 ### Measured, Not Claimed
 

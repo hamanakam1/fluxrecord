@@ -19,7 +19,7 @@ class Conflict(ValueError):
     """An ownership, budget, or lifecycle constraint refused an operation."""
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 #: Additive, idempotent migrations. Each entry moves a database from the
 #: previous version to the next; nothing is ever dropped or rewritten.
@@ -56,6 +56,14 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         (
             # Each event carries the digest of the one before it.
             "ALTER TABLE events ADD COLUMN digest TEXT NOT NULL DEFAULT ''",
+        ),
+    ),
+    (
+        7,
+        (
+            # A packet remembers the status it was taken at, so a delta can
+            # say that the ticket moved even when no new evidence arrived.
+            "ALTER TABLE packets ADD COLUMN status TEXT NOT NULL DEFAULT ''",
         ),
     ),
     (
@@ -176,6 +184,7 @@ class Ledger:
             tokens INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0,
             context_hashes TEXT NOT NULL DEFAULT '[]',
             failure_fingerprints TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT '',
             UNIQUE(task_id, hash));
         """)
         self._migrate(fresh)
@@ -919,7 +928,9 @@ class Ledger:
             base += added
         encoded = encode()
         digest = "sha256:" + hashlib.sha256(encoded).hexdigest()
-        self._record_packet(task_id, digest, len(encoded), packet, latest, failures)
+        self._record_packet(
+            task_id, digest, len(encoded), packet, latest, failures, str(task["status"])
+        )
         result: dict[str, Any] = {
             "packet": packet,
             "packet_bytes": len(encoded),
@@ -942,14 +953,15 @@ class Ledger:
         packet: dict[str, Any],
         latest: sqlite3.Row | None,
         failures: list[dict[str, Any]],
+        status: str = "",
     ) -> None:
         """Remember what this packet held, so a later one can be diffed."""
         context_hashes = [str(entry.get("hash", "")) for entry in packet["context"]]
         fingerprints = [str(failure.get("fingerprint", "")) for failure in failures]
         self.db.execute(
             "INSERT OR IGNORE INTO packets"
-            "(task_id,hash,created,checkpoint_id,tokens,bytes,context_hashes,failure_fingerprints)"
-            " VALUES (?,?,?,?,?,?,?,?)",
+            "(task_id,hash,created,checkpoint_id,tokens,bytes,context_hashes,"
+            "failure_fingerprints,status) VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 task_id,
                 digest,
@@ -959,6 +971,7 @@ class Ledger:
                 size,
                 json.dumps(context_hashes),
                 json.dumps(fingerprints),
+                status,
             ),
         )
 
@@ -988,6 +1001,7 @@ class Ledger:
         known_context = set(json.loads(row["context_hashes"]))
         known_failures = set(json.loads(row["failure_fingerprints"]))
         known_checkpoint = row["checkpoint_id"] or 0
+        known_status = str(row["status"]) if "status" in row.keys() else ""
 
         new_checkpoints = [
             dict(entry)
@@ -1010,9 +1024,13 @@ class Ledger:
         new_context = [
             entry for entry in packet["context"] if entry.get("hash") not in known_context
         ]
-        changed = bool(new_checkpoints or new_failures or new_context)
+        status = str(packet.get("status", ""))
+        moved = bool(known_status) and known_status != status
+        changed = bool(new_checkpoints or new_failures or new_context or moved)
         delta_packet = {
             "task_id": task_id,
+            "status": status,
+            "status_changed": moved,
             "checkpoints": new_checkpoints,
             "failures": new_failures,
             "context": new_context,
@@ -1026,6 +1044,7 @@ class Ledger:
             "changed": changed,
             "delta": delta_packet,
             "delta_bytes": delta_bytes,
+            "status_changed": moved,
             "note": "A delta is what changed; the full packet is still the truth.",
         }
 

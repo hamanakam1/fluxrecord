@@ -88,6 +88,21 @@ class DeltaTest(unittest.TestCase):
         again = self.ledger.pack("M-1", since=first["packet_hash"])
         self.assertLess(again["delta"]["delta_bytes"], again["packet_bytes"])
 
+    def test_a_status_change_shows_up_in_the_delta(self):
+        first = self.ledger.pack("M-1")
+        self.ledger.start("M-1", "terminal-1")
+        again = self.ledger.pack("M-1", since=first["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertTrue(again["delta"]["status_changed"])
+        self.assertEqual(again["delta"]["delta"]["status"], "in_progress")
+
+    def test_a_moved_ticket_without_new_evidence_is_still_a_change(self):
+        first = self.ledger.pack("M-1")
+        self.ledger.start("M-1", "terminal-1")
+        again = self.ledger.pack("M-1", since=first["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertEqual(again["delta"]["delta"]["checkpoints"], [])
+
     def test_an_unknown_hash_is_refused(self):
         with self.assertRaises(ValueError):
             self.ledger.pack("M-1", since="sha256:" + "0" * 64)
