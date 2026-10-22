@@ -175,6 +175,7 @@ fluxrecord/
 │   ├── dashboard.py     # Bounded GET-only ticket preview
 │   ├── github_sync.py   # Durable GitHub observations + outbox
 │   ├── github_cycle.py  # One observe/reconcile/publish cycle
+│   ├── importer.py      # CSV backlog import
 │   └── auth/            # JWT: jwt.py, middleware.py, routes.py
 ├── tests/
 ├── templates/           # Ticket and checkpoint templates
@@ -182,9 +183,20 @@ fluxrecord/
 ```
 
 The core ledger is stdlib-only: no network, no shell, no telemetry. The
-adapters around it each declare their own boundary — the dashboard reads
-loopback only, the GitHub sync talks to the `gh` CLI only, and the tooling
-inventory never executes anything.
+adapters around it each declare their own boundary, and each one is
+enforced rather than assumed.
+
+| Component | Boundary |
+|-----------|----------|
+| `core` | stdlib only; no network, no shell, no telemetry |
+| `dashboard` | loopback origins only; GET only; redirects refused; 8 MiB; 10 seconds |
+| `github_sync` | the `gh` CLI only; fixed argv; 30 seconds; no token anywhere |
+| `tools` | the filesystem only; nothing is ever executed |
+| `auth` | HS256 only; stdlib only; no web framework |
+
+Eligibility is not authorization, a finished session is not accepted work,
+and a declared profile is not a verified one. The code keeps those apart
+on purpose.
 
 ---
 
