@@ -6,6 +6,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def parser() -> argparse.ArgumentParser:
@@ -163,13 +164,14 @@ def main() -> None:
         if a.command == "init":
             from .ascii_art import get_art
 
-            result = {"schema": 1, "status": "ready", "dispatch_enabled": False}
-            print(json.dumps(result, indent=2, ensure_ascii=False))
+            payload = {"schema": 1, "status": "ready", "dispatch_enabled": False}
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
             print(get_art("small", color=sys.stderr.isatty()), file=sys.stderr)
             return
 
         ledger = Ledger(a.db)
         cmd = a.command
+        result: dict[str, Any]
 
         if cmd == "status":
             result = ledger.status()
