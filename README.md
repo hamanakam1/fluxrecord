@@ -116,6 +116,7 @@ creates a review, and only an operator decision creates a done.
 | `flux github-status --repo owner/repo` | What has been observed, and what is queued |
 | `flux github-publish --repo owner/repo --issue N --key K --body B` | Queue and publish a marked comment |
 | `flux github-reconcile --repo owner/repo` | Confirm sent comments against the issue |
+| `flux github-intake --repo owner/repo` | Turn observations into tickets |
 | `flux github-cycle --config cycle.json` | One observe/reconcile/publish cycle |
 | `flux art [--style large\|small\|mini\|minimal\|ascii] [--color]` | Print the wordmark |
 | `flux version` | Package version |
@@ -254,6 +255,29 @@ A cycle is described by a JSON file — see
 [`templates/github-cycle.json`](templates/github-cycle.json). Nothing is
 published unless the config asks for it, and a repository that fails is
 recorded and skipped rather than stopping the cycle.
+
+### From Observation to Ticket
+
+Observing a repository is only half the job. `flux github-intake` turns
+what was observed into work:
+
+- an observation that implies an action becomes a ticket — a failed check
+  to investigate, a pull request to review, feedback to answer — with the
+  observation attached as its context
+- an observation that names a fluxrecord ticket lands on that ticket
+  instead of becoming a new one
+- an observation that implies nothing — a successful run, a merged pull, a
+  commit — stays an observation
+
+```bash
+flux github-poll --repo owner/repo
+flux github-intake --repo owner/repo
+```
+
+Each ticket is seeded with `gh:{repo}#{kind}#{identity}`, so intake can
+run on a schedule without turning one pull request into a hundred
+tickets. The ticket's scope is the external item, so two people working
+the same issue still conflict.
 
 ---
 

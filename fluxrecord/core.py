@@ -186,6 +186,25 @@ class Ledger:
                     pass
         return view
 
+    def task_by_seed_key(self, seed_key: str) -> dict[str, Any] | None:
+        """The task seeded with a key, if there is one."""
+        if not seed_key:
+            return None
+        row = self.db.execute(
+            "SELECT * FROM tasks WHERE seed_key=?",
+            (seed_key,),
+        ).fetchone()
+        return self._decode(row) if row is not None else None
+
+    def next_ticket_id(self) -> str:
+        """The next free sequential ticket id, in the M-###### space."""
+        highest = 0
+        for row in self.db.execute("SELECT id FROM tasks"):
+            digits = str(row["id"])[2:]
+            if digits.isdigit():
+                highest = max(highest, int(digits))
+        return f"M-{highest + 1:06d}"
+
     def task_view(self, task_id: str) -> dict[str, Any]:
         """A task as it appears on the wire: JSON columns decoded."""
         return self._decode(self.task(task_id))

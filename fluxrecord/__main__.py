@@ -105,6 +105,17 @@ def parser() -> argparse.ArgumentParser:
     g = sub.add_parser("github-cycle")
     g.add_argument("--config", required=True)
 
+    g = sub.add_parser("github-intake", help="turn observations into tickets")
+    g.add_argument("--repo", required=True)
+    g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+    g.add_argument("--kind", dest="kinds", action="append", default=None)
+    g.add_argument("--limit-per-kind", type=int, default=25)
+    g.add_argument(
+        "--include-informational",
+        action="store_true",
+        help="also ticket observations that imply no work",
+    )
+
     d = sub.add_parser("dashboard-preview")
     d.add_argument("--url", required=True, help="Explicit local ticket-service origin")
     d.add_argument(
@@ -252,6 +263,28 @@ def main() -> None:
             from . import __version__
 
             print(json.dumps({"name": "fluxrecord", "version": __version__}, indent=2))
+            return
+
+        if a.command == "github-intake":
+            from .core import Ledger
+            from .github_sync import GitHubSync
+            from .intake import intake
+
+            sync = GitHubSync(a.sync_db)
+            ledger = Ledger(a.db)
+            try:
+                intake_result = intake(
+                    ledger,
+                    sync,
+                    a.repo,
+                    a.kinds,
+                    a.limit_per_kind,
+                    a.include_informational,
+                )
+            finally:
+                ledger.close()
+                sync.close()
+            print(json.dumps(intake_result, indent=2, ensure_ascii=False))
             return
 
         if a.command == "art":

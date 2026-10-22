@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS observations (
     repo TEXT NOT NULL, kind TEXT NOT NULL, identity TEXT NOT NULL,
     revision TEXT NOT NULL, observed REAL NOT NULL, summary TEXT NOT NULL,
     action TEXT NOT NULL, url TEXT NOT NULL DEFAULT '',
-    ticket TEXT, actor TEXT NOT NULL DEFAULT '',
+    ticket TEXT, actor TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (repo, kind, identity, revision));
 CREATE TABLE IF NOT EXISTS outbox (
     repo TEXT NOT NULL, issue INTEGER NOT NULL, key TEXT NOT NULL,
@@ -169,6 +169,19 @@ def _revision(record: dict[str, Any]) -> str:
     return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
+def _status(kind: str, record: dict[str, Any]) -> str:
+    """The record's own state, as the observation should report it."""
+    if kind == "pulls":
+        if record.get("merged"):
+            return "merged"
+        return str(record.get("state", ""))
+    if kind in ("issues", "releases"):
+        return str(record.get("state") or record.get("status") or "")
+    if kind == "runs":
+        return str(record.get("conclusion") or record.get("status") or "")
+    return ""
+
+
 def _ticket_ref(record: dict[str, Any]) -> str | None:
     for field in ("body", "title"):
         value = record.get(field)
@@ -190,6 +203,9 @@ class GitHubSync:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(_SCHEMA)
+        columns = {row["name"] for row in self.db.execute("PRAGMA table_info(observations)")}
+        if "status" not in columns:
+            self.db.execute("ALTER TABLE observations ADD COLUMN status TEXT NOT NULL DEFAULT ''")
         self._run: Runner = runner if runner is not None else _gh_json
 
     def close(self) -> None:
@@ -218,8 +234,8 @@ class GitHubSync:
         login = actor.get("login", "") if isinstance(actor, dict) else ""
         self.db.execute(
             "INSERT OR IGNORE INTO observations"
-            "(repo,kind,identity,revision,observed,summary,action,url,ticket,actor)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "(repo,kind,identity,revision,observed,summary,action,url,ticket,actor,status)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 repo,
                 kind,
@@ -231,6 +247,7 @@ class GitHubSync:
                 str(record.get("html_url", "")),
                 _ticket_ref(record),
                 login,
+                _status(kind, record),
             ),
         )
         return changed
@@ -277,6 +294,26 @@ class GitHubSync:
             "pages_capped": max_pages,
             "note": "Observations are evidence about a repository, never authority to act.",
         }
+
+    def observations(
+        self,
+        repo: str,
+        kind: str | None = None,
+        action: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """What has been observed for a repository, newest first."""
+        query = "SELECT * FROM observations WHERE repo=?"
+        params: list[Any] = [repo]
+        if kind:
+            query += " AND kind=?"
+            params.append(kind)
+        if action:
+            query += " AND action=?"
+            params.append(action)
+        query += " ORDER BY observed DESC, kind, identity LIMIT ?"
+        params.append(limit)
+        return [dict(row) for row in self.db.execute(query, params)]
 
     def status(self, repo: str) -> dict[str, Any]:
         """Summarise what has been observed and what is queued to publish."""
