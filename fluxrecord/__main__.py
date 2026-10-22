@@ -24,6 +24,17 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status")
 
+    lst = sub.add_parser("list", help="list tickets with filters")
+    lst.add_argument("--status")
+    lst.add_argument("--priority", type=int)
+    lst.add_argument("--kind")
+    lst.add_argument("--owner")
+    lst.add_argument("--tag")
+    lst.add_argument("--scope")
+    lst.add_argument("--limit", type=int, default=100)
+
+    sub.add_parser("version", help="print the package version")
+
     exp = sub.add_parser("export", help="write tickets to the project directory")
     exp.add_argument("--project", default=".fluxrecord")
 
@@ -199,6 +210,12 @@ def main() -> None:
             print(json.dumps(ledger.events(a.after), indent=2, ensure_ascii=False))
             return
 
+        if a.command == "version":
+            from . import __version__
+
+            print(json.dumps({"name": "fluxrecord", "version": __version__}, indent=2))
+            return
+
         if a.command == "art":
             from .ascii_art import get_art
 
@@ -262,6 +279,28 @@ def main() -> None:
 
         if cmd == "status":
             result = ledger.status()
+        elif cmd == "list":
+            tickets = ledger.list_tasks(
+                a.status,
+                a.priority,
+                a.kind,
+                a.owner,
+                a.tag,
+                a.scope,
+                a.limit,
+            )
+            result = {
+                "tickets": tickets,
+                "count": len(tickets),
+                "filters": {
+                    "status": a.status,
+                    "priority": a.priority,
+                    "kind": a.kind,
+                    "owner": a.owner,
+                    "tag": a.tag,
+                    "scope": a.scope,
+                },
+            }
         elif cmd == "task-add":
             result = ledger.add_task(
                 a.id,

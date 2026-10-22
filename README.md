@@ -87,6 +87,7 @@ INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
 | `flux export [--project .fluxrecord]` | Write tickets and evidence as files |
 | `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
 | `flux status` | Ledger state, metrics and failure history |
+| `flux list [--status S] [--priority N] [--tag T] [--scope S] [--owner O]` | List tickets with filters |
 | `flux events [--after N]` | The event log, as JSON |
 | `flux pack <id> [--max-bytes N] [--packet-only]` | Bounded context packet for a ticket |
 | `flux context-add <id> --file F --source S` | Attach context to a ticket |
@@ -99,6 +100,7 @@ INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
 | `flux github-reconcile --repo owner/repo` | Confirm sent comments against the issue |
 | `flux github-cycle --config cycle.json` | One observe/reconcile/publish cycle |
 | `flux art [--style large\|small\|mini\|minimal\|ascii] [--color]` | Print the wordmark |
+| `flux version` | Package version |
 
 ---
 
