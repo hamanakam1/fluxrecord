@@ -120,6 +120,7 @@ creates a review, and only an operator decision creates a done.
 | `flux github-cycle --config cycle.json` | One observe/reconcile/publish cycle |
 | `flux art [--style large\|small\|mini\|minimal\|ascii] [--color]` | Print the wordmark |
 | `flux version` | Package version |
+| `flux doctor [--project .fluxrecord] [--dashboard URL]` | Report on the ledger, the project and the adapters |
 
 ---
 
@@ -307,6 +308,23 @@ fixed to HS256 and read from the header rather than trusted from it, so
 with `hmac.compare_digest`; `exp`, `nbf`, `iss` and `aud` are checked on
 every verification; refresh tokens rotate and are spent once; and every
 token carries a `jti`, so it can be revoked.
+
+---
+
+## Doctor
+
+`flux doctor` asks every part of the package what it knows and puts the
+answers together: the ledger and its schema, the project directory and
+whether it is in step with the ledger, what the GitHub adapter has
+observed, which tools are installed, and the environment.
+
+```bash
+flux doctor
+flux doctor --project .fluxrecord --dashboard http://127.0.0.1:8080
+```
+
+It ends with notes rather than a verdict: what is blocked, what is
+waiting for review, what is stale, and which command would move it.
 
 ---
 

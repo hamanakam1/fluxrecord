@@ -49,6 +49,11 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("version", help="print the package version")
 
+    doc = sub.add_parser("doctor", help="report on the ledger, the project and the adapters")
+    doc.add_argument("--project", default=".fluxrecord")
+    doc.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+    doc.add_argument("--dashboard", default=None, help="probe a local dashboard origin")
+
     show = sub.add_parser("show", help="show one ticket and everything recorded about it")
     show.add_argument("task")
 
@@ -257,6 +262,18 @@ def main() -> None:
         if a.command == "events":
             ledger = Ledger(a.db)
             print(json.dumps(ledger.events(a.after), indent=2, ensure_ascii=False))
+            return
+
+        if a.command == "doctor":
+            from .doctor import diagnose
+
+            print(
+                json.dumps(
+                    diagnose(a.db, a.project, a.sync_db, a.dashboard),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
             return
 
         if a.command == "version":
