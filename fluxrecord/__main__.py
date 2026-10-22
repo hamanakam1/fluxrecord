@@ -97,6 +97,9 @@ def parser() -> argparse.ArgumentParser:
     show = sub.add_parser("show", help="show one ticket and everything recorded about it")
     show.add_argument("task")
 
+    read = sub.add_parser("read", help="read an exported ticket file back")
+    read.add_argument("file", help="the path of a ticket file")
+
     exp = sub.add_parser("export", help="write tickets to the project directory")
     exp.add_argument("--project", default=".fluxrecord")
 
@@ -523,6 +526,12 @@ def main() -> None:
             }
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             print(get_art("small", color=sys.stderr.isatty()), file=sys.stderr)
+            return
+
+        if a.command == "read":
+            from .files import read_ticket
+
+            print(json.dumps(read_ticket(a.file), indent=2, ensure_ascii=False))
             return
 
         if a.command == "export":

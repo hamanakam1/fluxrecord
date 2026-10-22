@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-__all__ = ["scaffold", "export", "render_ticket", "TICKET_FIELDS"]
+__all__ = ["scaffold", "export", "read_ticket", "render_ticket", "TICKET_FIELDS"]
 
 #: Front matter fields, in the order the specification lists them.
 TICKET_FIELDS = (
@@ -72,6 +72,112 @@ def _value(field: str, value: Any) -> str:
     if isinstance(value, int) and not isinstance(value, bool):
         return str(value)
     return json.dumps("" if value is None else value)
+
+
+def read_ticket(path: str | Path) -> dict[str, Any]:
+    """Read an exported ticket file back into the ticket it describes.
+
+    The file is a projection of the ledger, and this is the other
+    direction: a reader that has only the file can say what the ticket
+    says. A tool that does not share the ledger can still read a ticket.
+
+    The front matter is the frozen shape; the body is prose, and what can
+    be read from it is read.
+    """
+    text = Path(path).expanduser().read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        raise ValueError("the file has no front matter")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        raise ValueError("the file has no front matter")
+    fields = _front_matter(parts[1])
+    body = parts[2]
+    sections = _sections(body)
+    ticket: dict[str, Any] = dict(fields)
+    ticket["description"] = sections.get("Description", "").strip()
+    acceptance = sections.get("Acceptance Criteria", "").strip()
+    ticket["acceptance"] = acceptance.removeprefix("- [ ]").strip()
+    ticket["dependencies"] = _dependencies(sections.get("Dependencies", ""))
+    ticket["failures"] = [
+        line.strip().lstrip("- ").strip()
+        for line in sections.get("Failures", "").splitlines()
+        if line.strip().startswith("- ") and line.strip() != "- none"
+    ]
+    ticket["evidence_log"] = _evidence_log(sections.get("Evidence Log", ""))
+    return ticket
+
+
+def _front_matter(block: str) -> dict[str, Any]:
+    """The front matter of a ticket file, as values."""
+    fields: dict[str, Any] = {}
+    for line in block.strip().splitlines():
+        name, _, raw = line.partition(":")
+        name = name.strip()
+        raw = raw.strip()
+        if not name:
+            continue
+        if raw.startswith("[") and raw.endswith("]"):
+            fields[name] = [
+                part.strip().strip('"') for part in raw[1:-1].split(",") if part.strip()
+            ]
+        elif raw.startswith('"') and raw.endswith('"'):
+            fields[name] = raw[1:-1]
+        elif raw.lstrip("-").isdigit():
+            fields[name] = int(raw)
+        else:
+            fields[name] = raw
+    return fields
+
+
+def _sections(body: str) -> dict[str, str]:
+    """The markdown sections of a ticket file."""
+    sections: dict[str, str] = {}
+    name = ""
+    lines: list[str] = []
+    for line in body.splitlines():
+        if line.startswith("## "):
+            if name:
+                sections[name] = "\n".join(lines)
+            name = line[3:].strip()
+            lines = []
+            continue
+        lines.append(line)
+    if name:
+        sections[name] = "\n".join(lines)
+    return sections
+
+
+def _dependencies(section: str) -> list[str]:
+    """The ids a ticket depends on, from the dependencies section."""
+    found: list[str] = []
+    for line in section.splitlines():
+        line = line.strip()
+        if line.startswith("- depends on:"):
+            found.extend(part.strip() for part in line.split(":", 1)[1].split(",") if part.strip())
+    return [item for item in found if item != "(none)"]
+
+
+def _evidence_log(section: str) -> list[dict[str, str]]:
+    """The evidence log of a ticket file, as rows."""
+    rows: list[dict[str, str]] = []
+    for line in section.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 4 or cells[0].lower() == "timestamp":
+            continue
+        if all(set(cell) <= set("-: ") for cell in cells):
+            continue  # the separator row of the table
+        rows.append(
+            {
+                "at": cells[0],
+                "actor": cells[1],
+                "action": cells[2],
+                "evidence": cells[3],
+            }
+        )
+    return rows
 
 
 def render_ticket(task: dict[str, Any], evidence: dict[str, Any]) -> str:

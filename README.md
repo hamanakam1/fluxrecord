@@ -105,6 +105,7 @@ creates a review, and only an operator decision creates a done.
 | `flux accept\|retry\|cancel <id> --reason "..."` | The same decision, one command per outcome |
 | `flux init [--project .fluxrecord]` | Create the ledger and the project layout |
 | `flux export [--project .fluxrecord]` | Write tickets and evidence as files |
+| `flux read <file>` | Read an exported ticket file back |
 | `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
 | `flux status` | Ledger state, metrics and failure history |
 | `flux status --summary` | The board: one line per ticket, for a person to read |
@@ -518,6 +519,11 @@ tickets can be read, diffed and reviewed without opening the database.
         └── finish.json
 ```
 
+The projection goes both ways: `flux read` reads a ticket file back, so a
+tool that does not share the ledger can still read a ticket. The front
+matter is the frozen shape of the file, and it is validated against the
+published schema like everything else.
+
 ---
 
 ## Core Concepts
@@ -584,6 +590,8 @@ of the file, and a number anybody can reproduce with the command above.
 Files that the ticket names but that do not exist are not counted, so the
 comparison never flatters itself.
 
+<img src="docs/screenshots/benchmark.png" width="100%" alt="flux benchmark — the packet against the bytes re-reading the files would cost">
+
 ### Tokenizer and Budget
 
 The byte budget is exact and always there. A token count appears only
@@ -633,10 +641,12 @@ regenerated in the same commit.
 
 | | |
 |:--|:--|
-| <img src="docs/screenshots/init.png" width="100%" alt="flux init — the ledger and the project layout"> | <img src="docs/screenshots/failure.png" width="100%" alt="flux fail, then flux list --status blocked — a failure is a first-class record"> |
-| <img src="docs/screenshots/show.png" width="100%" alt="flux show — one ticket with its sessions, checkpoints, events and failures"> | <img src="docs/screenshots/pack.png" width="100%" alt="flux pack — the bounded context packet, sized exactly in bytes"> |
+| <img src="docs/screenshots/benchmark.png" width="100%" alt="flux benchmark — the packet a worker is handed, against the bytes it would spend re-reading the files the ticket names"> | <img src="docs/screenshots/doctor.png" width="100%" alt="flux doctor — one report about the ledger, the project and every adapter"> |
+| <img src="docs/screenshots/delta.png" width="100%" alt="flux pack --since --delta-only — what changed, rather than the whole packet again"> | <img src="docs/screenshots/watch.png" width="100%" alt="flux watch — new events as they land, with no server and no socket"> |
+| <img src="docs/screenshots/verify.png" width="100%" alt="flux verify — the event log, and the proof that it was not rewritten"> | <img src="docs/screenshots/failure.png" width="100%" alt="flux fail, then flux list --status blocked — a failure is a first-class record"> |
+| <img src="docs/screenshots/pack.png" width="100%" alt="flux pack — the bounded context packet, sized exactly in bytes"> | <img src="docs/screenshots/show.png" width="100%" alt="flux show — one ticket with its sessions, checkpoints, events and failures"> |
+| <img src="docs/screenshots/init.png" width="100%" alt="flux init — the ledger and the project layout"> | <img src="docs/screenshots/export.png" width="100%" alt="flux export — the ledger projected onto files"> |
 | <img src="docs/screenshots/list.png" width="100%" alt="flux list — tickets with filters"> | <img src="docs/screenshots/status.png" width="100%" alt="flux status — the ledger, its sessions, its failures and its metrics"> |
-| <img src="docs/screenshots/tools.png" width="100%" alt="flux tools — the local executable inventory; nothing is executed"> | <img src="docs/screenshots/export.png" width="100%" alt="flux export — the ledger projected onto files"> |
 
 ---
 

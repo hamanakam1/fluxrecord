@@ -268,6 +268,7 @@ flux dashboard-intake --url http://127.0.0.1:8080
 # Project files, adapters and the wordmark
 flux init --project .fluxrecord
 flux export --project .fluxrecord
+flux read .fluxrecord/tickets/M-397001.md
 flux import --file tickets.csv
 flux tools --history
 flux doctor --project .fluxrecord
