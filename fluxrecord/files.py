@@ -117,9 +117,13 @@ def _front_matter(block: str) -> dict[str, Any]:
         if not name:
             continue
         if raw.startswith("[") and raw.endswith("]"):
-            fields[name] = [
-                part.strip().strip('"') for part in raw[1:-1].split(",") if part.strip()
-            ]
+            # The writer emits JSON, so the reader reads JSON: a value with
+            # a comma in it survives the round trip.
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = [part.strip().strip('"') for part in raw[1:-1].split(",") if part.strip()]
+            fields[name] = parsed
         elif raw.startswith('"') and raw.endswith('"'):
             fields[name] = raw[1:-1]
         elif raw.lstrip("-").isdigit():

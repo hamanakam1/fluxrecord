@@ -61,6 +61,19 @@ class ReadBackTest(unittest.TestCase):
         for row in ticket["evidence_log"]:
             self.assertNotEqual(row["at"], "-----------")
 
+    def test_a_value_with_a_comma_in_it_survives_the_round_trip(self):
+        self.ledger.add_task(
+            "M-397002",
+            "Objective",
+            "Acceptance",
+            scope=["repo/a,b", "repo/c"],
+            tags=["one,two"],
+        )
+        export(self.ledger, self.project)
+        ticket = read_ticket(self.project / "tickets" / "M-397002.md")
+        self.assertEqual(ticket["scope"], ["repo/a,b", "repo/c"])
+        self.assertEqual(ticket["tags"], ["one,two"])
+
     def test_a_file_with_no_front_matter_is_refused(self):
         path = self.root / "not-a-ticket.md"
         path.write_text("# just a heading\n")
