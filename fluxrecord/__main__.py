@@ -238,6 +238,16 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("task")
     c.add_argument("--max-bytes", type=int, default=12000)
     c.add_argument("--packet-only", action="store_true")
+    c.add_argument(
+        "--since",
+        default=None,
+        help="the hash of a packet sent before; returns only what changed",
+    )
+    c.add_argument(
+        "--delta-only",
+        action="store_true",
+        help="print the delta rather than the whole packet",
+    )
 
     c = sub.add_parser("profile-add")
     c.add_argument("id")
@@ -548,7 +558,14 @@ def main() -> None:
                 a.task, Path(a.file).read_text(), a.source, a.priority, a.ttl
             )
         elif cmd == "pack":
-            result = ledger.pack(a.task, a.max_bytes)
+            result = ledger.pack(a.task, a.max_bytes, a.since)
+            if a.delta_only:
+                if "delta" not in result:
+                    raise ValueError("--delta-only needs --since")
+                sys.stdout.write(
+                    json.dumps(result["delta"], ensure_ascii=False, separators=(",", ":"))
+                )
+                return
             if a.packet_only:
                 sys.stdout.write(
                     json.dumps(result["packet"], ensure_ascii=False, separators=(",", ":"))

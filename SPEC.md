@@ -235,6 +235,7 @@ flux cancel M-397001 --reason "..."
 # Context & packets
 flux context-add M-397001 --file ./README.md --source "repo readme" --priority 10
 flux pack M-397001 --max-bytes 12000 --packet-only
+flux pack M-397001 --since sha256:<hash of a packet sent before>
 
 # Routing & profiles
 flux profile-add local-coder --kind code --context-limit 16000 --cost zero_incremental --requires git
@@ -271,6 +272,19 @@ flux token introspect <token>
 flux art --style large --color
 flux version
 ```
+
+---
+
+## Packet Addressing
+
+Every packet carries `packet_hash`: the SHA-256 of its canonical JSON. The
+same ticket at the same state always produces the same hash, so an
+unchanged packet can be reused instead of sent again.
+
+`flux pack <id> --since <hash>` returns only what changed since the
+packet with that address — the checkpoints that landed, the failures that
+were recorded, the context that was attached — and says so when nothing
+changed. The full packet is still the truth; the delta is what is new.
 
 ---
 

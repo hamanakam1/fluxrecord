@@ -108,7 +108,7 @@ creates a review, and only an operator decision creates a done.
 | `flux show <id>` | One ticket with its sessions, checkpoints, failures and events |
 | `flux events [--after N] [--type T] [--task ID] [--limit N]` | The event log, as JSON |
 | `flux sessions [--active]` | Who is holding what, and how much lease is left |
-| `flux pack <id> [--max-bytes N] [--packet-only]` | Bounded context packet for a ticket |
+| `flux pack <id> [--max-bytes N] [--packet-only] [--since HASH] [--delta-only]` | Bounded context packet for a ticket |
 | `flux context-add <id> --file F --source S` | Attach context to a ticket |
 | `flux profile-add <id> --kind K --context-limit N --cost C` | Declare a profile |
 | `flux route <id> [--required-context N]` | Eligible profiles for a ticket |
@@ -421,6 +421,25 @@ existing ticket instead of creating a second one.
 flux start M-397001 --owner terminal-1 --lease 900
 # → {session_id, lease_until}
 ```
+
+### Packet = Addressed, and Only What Changed
+
+Every packet carries the hash of its content. The same ticket at the same
+state always produces the same hash, so an unchanged packet can be reused
+instead of sent again — and `flux pack --since <hash>` returns only what
+landed since the last one.
+
+```bash
+flux pack M-397001
+# → { "packet": {...}, "packet_hash": "sha256:...", "packet_bytes": 341 }
+
+flux pack M-397001 --since sha256:07b5a274...
+# → { "delta": { "changed": false, ... } }
+```
+
+That is where *less repeated context* stops being a slogan and becomes a
+number: the delta is smaller than the packet, and the saving is the
+difference.
 
 ### Checkpoint = Evidence + Progress
 ```bash
