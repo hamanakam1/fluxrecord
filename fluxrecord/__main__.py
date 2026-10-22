@@ -230,6 +230,13 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--context-limit", type=int, required=True)
     c.add_argument("--cost", choices=["zero_incremental", "paid", "unknown"], required=True)
     c.add_argument("--ttl", type=int, default=3600)
+    c.add_argument(
+        "--requires",
+        dest="requires",
+        action="append",
+        default=None,
+        help="a local tool this profile needs",
+    )
 
     c = sub.add_parser("route")
     c.add_argument("task")
@@ -491,9 +498,17 @@ def main() -> None:
                 )
                 return
         elif cmd == "profile-add":
-            result = ledger.profile(a.id, a.kind, a.context_limit, a.cost, a.ttl)
+            result = ledger.profile(a.id, a.kind, a.context_limit, a.cost, a.ttl, a.requires)
         elif cmd == "route":
-            result = ledger.route(a.task, a.required_context)
+            from .tools import available as tools_available
+
+            needed = {
+                tool
+                for profile in ledger.status()["profiles"]
+                for tool in profile.get("requires", [])
+            }
+            present = {name for name, path in tools_available(needed).items() if path}
+            result = ledger.route(a.task, a.required_context, present)
         else:
             print(json.dumps({"error": f"unknown command: {cmd}"}), file=sys.stderr)
             raise SystemExit(2)

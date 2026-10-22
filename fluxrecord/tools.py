@@ -11,12 +11,14 @@ result is evidence about the machine, not a claim about any one tool.
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-__all__ = ["inventory", "scan_path", "MAX_ENTRIES"]
+__all__ = ["available", "inventory", "scan_path", "MAX_ENTRIES"]
 
 MAX_ENTRIES = 500
 
@@ -63,6 +65,14 @@ def scan_path(limit: int = MAX_ENTRIES, metadata: bool = False) -> list[dict[str
         except OSError:
             continue
     return found
+
+
+def available(names: Iterable[str]) -> dict[str, str | None]:
+    """Where each named tool is, or None where it is not.
+
+    The filesystem is searched; nothing is executed.
+    """
+    return {name: shutil.which(name) for name in names}
 
 
 def inventory(history: bool = False, limit: int = 50) -> dict[str, Any]:

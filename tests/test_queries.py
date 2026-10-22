@@ -91,6 +91,45 @@ class ProfileTest(unittest.TestCase):
         self.assertEqual(route["options"][0]["provenance"], "operator declaration")
 
 
+class ToolRequirementTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "ledger.sqlite"
+        self.ledger = Ledger(self.path)
+        self.ledger.add_task("M-1", "Objective", "Acceptance", scope=["repo/x"])
+
+    def tearDown(self):
+        self.ledger.close()
+        self.temp.cleanup()
+
+    def test_a_profile_can_declare_the_tools_it_needs(self):
+        self.ledger.profile("coder", ["code"], 16000, "zero_incremental", requires=["git", "gh"])
+        profile = self.ledger.status()["profiles"][0]
+        self.assertEqual(sorted(profile["requires"]), ["gh", "git"])
+
+    def test_a_missing_tool_makes_a_profile_ineligible(self):
+        self.ledger.profile("coder", ["code"], 16000, "zero_incremental", requires=["nosuchtool"])
+        route = self.ledger.route("M-1", available_tools={"git", "gh"})
+        option = route["options"][0]
+        self.assertFalse(option["eligible"])
+        self.assertEqual(option["missing_tools"], ["nosuchtool"])
+        self.assertIn("nosuchtool", option["reasons"][0])
+
+    def test_a_profile_is_eligible_when_its_tools_are_there(self):
+        self.ledger.profile("coder", ["code"], 16000, "zero_incremental", requires=["git"])
+        route = self.ledger.route("M-1", available_tools={"git", "gh"})
+        option = route["options"][0]
+        self.assertTrue(option["eligible"])
+        self.assertEqual(option["missing_tools"], [])
+
+    def test_tool_availability_is_not_assumed(self):
+        self.ledger.profile("coder", ["code"], 16000, "zero_incremental", requires=["git"])
+        route = self.ledger.route("M-1")
+        option = route["options"][0]
+        self.assertTrue(option["eligible"])
+        self.assertEqual(option["missing_tools"], [])
+
+
 class ShowTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

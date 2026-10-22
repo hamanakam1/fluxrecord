@@ -113,7 +113,8 @@ class Ledger:
             fingerprint TEXT NOT NULL, summary TEXT NOT NULL, created REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS profiles (
             id TEXT PRIMARY KEY, kinds TEXT NOT NULL, context_limit INTEGER NOT NULL,
-            cost TEXT NOT NULL, verified_until REAL NOT NULL);
+            cost TEXT NOT NULL, verified_until REAL NOT NULL,
+            requires TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE IF NOT EXISTS events (
             seq INTEGER PRIMARY KEY, type TEXT NOT NULL, task_id TEXT,
             data TEXT NOT NULL, created REAL NOT NULL);
@@ -615,7 +616,8 @@ class Ledger:
         context_limit: int,
         cost: str,
         ttl: int = 3600,
-    ) -> dict[str, str]:
+        requires: list[str] | None = None,
+    ) -> dict[str, Any]:
         required(profile_id, "profile id")
         positive(context_limit, "context_limit")
         positive(ttl, "ttl")
@@ -625,18 +627,46 @@ class Ledger:
             raise ValueError("at least one task kind is required")
         for kind in kinds:
             required(kind, "kind")
+        for tool in requires or []:
+            required(tool, "required tool")
         with self.transaction():
             self.db.execute(
-                "INSERT INTO profiles VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kinds=excluded.kinds,context_limit=excluded.context_limit,cost=excluded.cost,verified_until=excluded.verified_until",
-                (profile_id, json.dumps(kinds), context_limit, cost, time.time() + ttl),
+                "INSERT INTO profiles(id,kinds,context_limit,cost,verified_until,requires)"
+                " VALUES (?,?,?,?,?,?)"
+                " ON CONFLICT(id) DO UPDATE SET kinds=excluded.kinds,"
+                " context_limit=excluded.context_limit,cost=excluded.cost,"
+                " verified_until=excluded.verified_until,requires=excluded.requires",
+                (
+                    profile_id,
+                    json.dumps(kinds),
+                    context_limit,
+                    cost,
+                    time.time() + ttl,
+                    json.dumps(sorted(set(requires or []))),
+                ),
             )
             self.event("profile.declared", None, profile=profile_id, cost=cost)
         return {
             "profile": profile_id,
+            "requires": sorted(set(requires or [])),
             "provenance": "operator declaration; not provider verification",
         }
 
-    def route(self, task_id: str, required_context: int = 4096) -> dict[str, Any]:
+    def route(
+        self,
+        task_id: str,
+        required_context: int = 4096,
+        available_tools: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """Which declared profiles could take this task, and why not.
+
+        Args:
+            task_id: the ticket to route
+            required_context: context the profile must be able to hold
+            available_tools: names of the tools installed on this machine;
+                when given, a profile that needs a missing tool is not
+                eligible
+        """
         positive(required_context, "required_context")
         task = self.task(task_id)
         options: list[dict[str, Any]] = []
@@ -650,11 +680,17 @@ class Ledger:
                 reasons.append("new spending is not authorized or cost is unknown")
             if row["verified_until"] <= time.time():
                 reasons.append("profile declaration expired")
+            requires = json.loads(row["requires"]) if "requires" in row.keys() else []
+            missing = [tool for tool in requires if tool not in (available_tools or set())]
+            if available_tools is not None and missing:
+                reasons.append("required tool is not installed: " + ", ".join(missing))
             options.append(
                 {
                     "profile": row["id"],
                     "eligible": not reasons,
                     "reasons": reasons,
+                    "requires": requires,
+                    "missing_tools": missing if available_tools is not None else [],
                     "quality_estimate": None,
                     "provenance": "operator declaration",
                 }
@@ -754,6 +790,7 @@ class Ledger:
                     "context_limit": row["context_limit"],
                     "cost": row["cost"],
                     "verified_until": row["verified_until"],
+                    "requires": json.loads(row["requires"]) if "requires" in row.keys() else [],
                 }
                 for row in self.db.execute("SELECT * FROM profiles ORDER BY id")
             ],
