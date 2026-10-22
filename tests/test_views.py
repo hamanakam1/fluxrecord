@@ -20,7 +20,7 @@ class SessionViewTest(unittest.TestCase):
         self.temp.cleanup()
 
     def test_a_session_reports_the_lease_it_has_left(self):
-        started = self.ledger.start("M-1", "terminal-1", lease_seconds=900)
+        self.ledger.start("M-1", "terminal-1", lease_seconds=900)
         sessions = self.ledger.sessions()
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0]["owner"], "terminal-1")

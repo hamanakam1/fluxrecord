@@ -42,6 +42,13 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The idempotency marker is written in this project's own namespace.**
+  A queued GitHub comment now carries `<!-- fluxrecord:{key}:{digest} -->`
+  rather than `<!-- taskrivet:… -->`. The marker is a wire format, and
+  another project's name in it is a name this project would have to break
+  later. The old namespace is still **read**, so a comment published by an
+  earlier version is recognised and confirmed rather than sent a second
+  time; it is never written. Both the specification and the README say so.
 - **The development tools are pinned.** `mypy`, `ruff`, `pytest`,
   `hypothesis` and `coverage` are pinned to exact versions. A gate that
   moves under the build is not a gate: a formatter that reformats the tree

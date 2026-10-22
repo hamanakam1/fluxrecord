@@ -248,9 +248,11 @@ The `gh` CLI is the only way out — no token is read or stored anywhere, and
 every call is bounded by a 30 second timeout.
 
 Writing is idempotent. A queued comment carries a
-`<!-- taskrivet:{key}:{digest} -->` marker, and `publish` matches that
+`<!-- fluxrecord:{key}:{digest} -->` marker, and `publish` matches that
 marker before sending anything, so a retry confirms instead of
-double-posting.
+double-posting. The namespace used to be `taskrivet`; that form is still
+read, so a comment published by an earlier version is recognised and
+never sent twice.
 
 ```bash
 flux github-poll --repo owner/repo

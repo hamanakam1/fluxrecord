@@ -278,9 +278,10 @@ world is to reach 1.0 by renaming things and calling it a day.
   that any implementation can run against its own ledger and pass. The suite
   is the standard's teeth.
 - **An interop marker.** The idempotency marker
-  `<!-- taskrivet:{key}:{digest} -->` is already an interop point, and the
-  name is wrong: it says `taskrivet`. Renaming it to `<!-- fluxrecord:… -->`
-  is a breaking change and needs a migration note and a dual-read window.
+  `<!-- fluxrecord:{key}:{digest} -->` is an interop point, and it used to
+  say `taskrivet`. The rename is done, with a dual-read window: the old
+  namespace is still read, so a comment published by an earlier version is
+  recognised and never sent twice.
 - **The identifier registry.** The `M-` ranges in `SPEC.md` are a registry
   and should be published as one, with the allocation rule.
 - **A written breaking-change policy.** What a breaking change is, how it is
@@ -570,9 +571,15 @@ planning.
    library-only, because a service is a new boundary and the project has
    earned the right to add one only when it can say what it is for.
 
-4. **Is the `taskrivet` marker renamed to `fluxrecord` before 1.0 or after?**
-   *Recommendation:* before. A 1.0 that ships with a competitor's name in its
-   wire format is a 1.0 that has to break later.
+4. ~~**Is the `taskrivet` marker renamed to `fluxrecord` before 1.0 or
+   after?**~~
+   **Settled: before, and it is done.** A 1.0 that ships with a
+   competitor's name in its wire format is a 1.0 that has to break later.
+   The marker is now written as `<!-- fluxrecord:{key}:{digest} -->`, and
+   the old namespace is still read, so a comment published by an earlier
+   version is recognised and confirmed rather than sent twice. The rename
+   has a dual-read window, which is what makes it safe to do before 1.0
+   rather than after.
 
 5. **What is the support window for Python versions?**
    *Recommendation:* 3.11–3.13, with 3.14 added to CI once it is the local
