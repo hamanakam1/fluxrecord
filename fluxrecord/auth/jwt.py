@@ -78,11 +78,10 @@ class Claims:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "sub": self.subject,
-            "iat": self.issued_at,
-            "exp": self.expires_at,
-        }
+        payload: dict[str, Any] = dict(self.extra)
+        payload["sub"] = self.subject
+        payload["iat"] = self.issued_at
+        payload["exp"] = self.expires_at
         if self.issuer:
             payload["iss"] = self.issuer
         if self.audience:
@@ -93,7 +92,6 @@ class Claims:
             payload["typ"] = self.token_type
         if self.scopes:
             payload["scope"] = " ".join(self.scopes)
-        payload.update(self.extra)
         return payload
 
     @property

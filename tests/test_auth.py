@@ -51,6 +51,17 @@ class IssueTest(unittest.TestCase):
         self.assertEqual(claims.scopes, ("read", "write"))
         self.assertTrue(claims.token_id)
 
+    def test_extra_claims_cannot_override_the_standard_ones(self):
+        token, _ = issue(
+            "terminal-1",
+            SECRET,
+            ttl_seconds=60,
+            extra={"sub": "root", "tenant": "acme"},
+        )
+        claims = verify(token, SECRET)
+        self.assertEqual(claims.subject, "terminal-1")
+        self.assertEqual(claims.extra["tenant"], "acme")
+
     def test_an_empty_subject_is_refused(self):
         with self.assertRaises(ValueError):
             issue("", SECRET)
@@ -159,7 +170,9 @@ class RoutesTest(unittest.TestCase):
             SECRET,
             issuer="fluxrecord",
             audience="api",
-            verify_credentials=lambda user, password: user == "terminal-1" and password == "good",
+            verify_credentials=lambda user, password: (
+                ("read", "write") if user == "terminal-1" and password == "good" else None
+            ),
         )
 
     def test_login_returns_a_token_pair(self):
@@ -178,6 +191,19 @@ class RoutesTest(unittest.TestCase):
         self.assertEqual(response.status, 401)
         self.assertEqual(response.body["type"], "https://fluxrecord.dev/errors/invalid-credentials")
 
+    def test_a_client_cannot_ask_for_a_scope(self):
+        response = self.routes.handle(
+            "POST",
+            "/api/auth/login",
+            {"username": "terminal-1", "password": "good", "scopes": ["admin", "root"]},
+        )
+        self.assertEqual(response.status, 200)
+        from fluxrecord.auth import verify
+
+        claims = verify(response.body["access_token"], SECRET)
+        self.assertEqual(claims.scopes, ("read", "write"))
+        self.assertNotIn("admin", claims.scopes)
+
     def test_login_without_a_body_is_a_bad_request(self):
         response = self.routes.handle("POST", "/api/auth/login", {})
         self.assertEqual(response.status, 400)
@@ -191,6 +217,18 @@ class RoutesTest(unittest.TestCase):
         )
         self.assertEqual(refreshed.status, 200)
         self.assertNotEqual(refreshed.body["refresh_token"], login.body["refresh_token"])
+
+    def test_a_refreshed_token_keeps_its_scopes(self):
+        from fluxrecord.auth import verify
+
+        login = self.routes.handle(
+            "POST", "/api/auth/login", {"username": "terminal-1", "password": "good"}
+        )
+        refreshed = self.routes.handle(
+            "POST", "/api/auth/refresh", {"refresh_token": login.body["refresh_token"]}
+        )
+        claims = verify(refreshed.body["access_token"], SECRET)
+        self.assertEqual(claims.scopes, ("read", "write"))
 
     def test_a_refresh_token_is_spent_once(self):
         login = self.routes.handle(

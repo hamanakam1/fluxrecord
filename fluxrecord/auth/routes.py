@@ -6,6 +6,10 @@ response. Anything that wants to serve these routes can adapt its own
 framework to that shape; nothing here depends on one.
 
 Errors follow RFC 7807.
+
+The credential verifier returns the scopes to grant, or None to refuse the
+credentials. Scopes are never taken from the request: a client that could
+name its own scope would be promoting itself.
 """
 
 from __future__ import annotations
@@ -54,7 +58,7 @@ class AuthRoutes:
         audience: str = "",
         access_ttl: int = 900,
         refresh_ttl: int = 86400,
-        verify_credentials: Callable[[str, str], bool] | None = None,
+        verify_credentials: Callable[[str, str], tuple[str, ...] | None] | None = None,
         revoked: RevocationList | None = None,
         now: int | None = None,
     ) -> None:
@@ -85,13 +89,15 @@ class AuthRoutes:
             token_type="access",
             now=self._moment(),
         )
+        # The refresh token carries the scopes the server granted, so the
+        # access token minted from it keeps them.
         refresh, refresh_claims = issue(
             subject,
             self.secret,
             ttl_seconds=self.refresh_ttl,
             issuer=self.issuer,
             audience=self.audience,
-            scopes=(),
+            scopes=scopes,
             token_type="refresh",
             now=self._moment(),
         )
@@ -113,12 +119,12 @@ class AuthRoutes:
             return _problem(400, "invalid-request", "username and password are required")
         if self.verify_credentials is None:
             return _problem(500, "not-configured", "no credential verifier is configured")
-        if not self.verify_credentials(username, password):
+        granted = self.verify_credentials(username, password)
+        if granted is None:
             return _problem(401, "invalid-credentials", "username or password is wrong")
-        scopes = body.get("scopes") or []
-        if not isinstance(scopes, (list, tuple)):
-            return _problem(400, "invalid-request", "scopes must be a list")
-        return Response(200, self._pair(username, tuple(str(s) for s in scopes)))
+        # The scopes come from the verifier, never from the request: a client
+        # that could ask for a scope would be asking for its own promotion.
+        return Response(200, self._pair(username, tuple(str(scope) for scope in granted)))
 
     def refresh(self, body: Mapping[str, Any]) -> Response:
         token = str(body.get("refresh_token", ""))
