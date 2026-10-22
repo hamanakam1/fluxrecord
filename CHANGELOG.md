@@ -56,6 +56,14 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   matter is validated against `ticket_file`, and its times are strings
   there, where the ledger keeps them as numbers: the file is a document,
   not a record.
+- **There is a conformance suite that can check somebody else's
+  implementation.** `conformance/run.py` runs a fixed sequence of commands
+  against an implementation and checks every report against the published
+  schema. It knows nothing about fluxrecord's internals, so
+  "fluxrecord-compatible" means something a third party can check for
+  themselves. This implementation passes it, the suite rejects an
+  implementation that answers with the wrong shape, and an implementation
+  that answers nothing is a failure rather than a traceback.
 - **The event chain is reachable, and tested.** Every ledger the CLI opens
   is now chained when `FLUX_EVENT_KEY` is set, so the chain is no longer a
   capability that exists only inside the library. `tests/test_chain.py`

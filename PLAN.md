@@ -294,9 +294,11 @@ world is to reach 1.0 by renaming things and calling it a day.
 **Exit criteria**
 
 - [x] `fluxrecord-conformance` exists and passes against the reference
-      implementation. (In-repo for now: `tests/test_conformance.py` runs the
-      published shapes against the real CLI, and a separate package can run
-      the same checks against another implementation.)
+      implementation. `conformance/run.py` runs a fixed sequence of commands
+      against an implementation — this one or anybody else's — and checks
+      every report against the published schema. It knows nothing about
+      fluxrecord's internals, which is what makes it a conformance suite
+      rather than a test suite.
 - [x] The wire format has a JSON Schema and a version number, and the CLI
       reports which version it speaks. The schema is *generated* from the
       code's shapes by `scripts/publish_schema.py` and checked against the

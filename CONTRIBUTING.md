@@ -48,6 +48,12 @@ ruff format --check fluxrecord/
 
 # Regenerate the README screenshots (needs Chrome)
 python3 scripts/capture_screenshots.py
+
+# Regenerate the published wire-format schema from the code's shapes
+python3 scripts/publish_schema.py
+
+# Check an implementation against the standard
+python3 conformance/run.py
 ```
 
 CI runs all four on Python 3.11 and 3.12. The suite covers the ledger, the

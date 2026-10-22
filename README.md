@@ -473,6 +473,19 @@ From wire format 1 onwards, changing the name of a field is a breaking
 change. The ticket and the packet are frozen; the board and the session
 list are views, and may grow a field.
 
+And there is something to check it against:
+
+```bash
+python3 conformance/run.py --command "my-ledger"
+```
+
+The [conformance suite](conformance/README.md) runs a fixed sequence of
+commands against an implementation and checks every report against the
+published schema. It knows nothing about fluxrecord's internals, so
+"fluxrecord-compatible" means something a third party can check for
+themselves. This implementation passes it, and the suite is required to
+reject an implementation that does not.
+
 ---
 
 ## Threat Model
