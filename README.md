@@ -436,6 +436,26 @@ who can write to one can write to the other.
 
 ---
 
+## When Things Go Wrong
+
+The ledger is built for the case where a worker stops without saying
+goodbye. A lease that runs out blocks its ticket, records a
+`lease_expired` failure, and keeps the resource reserved until an
+operator releases it — so a dead worker cannot be half-replaced by
+accident.
+
+```bash
+flux adopt <session_id> --owner terminal-2 --reason "the old worker is gone"
+```
+
+A transaction that is cut in half leaves nothing behind, a killed process
+leaves a ledger that still opens, and the event chain still verifies.
+Those are checked by a chaos suite that kills things on purpose, because
+the rules that matter under failure are the ones a worker cannot check
+for itself.
+
+---
+
 ## The Standard
 
 The JSON this package emits is a contract with other tools, so it is
