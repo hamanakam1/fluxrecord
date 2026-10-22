@@ -31,13 +31,16 @@ def _ledger_report(db_path: str | Path) -> dict[str, Any]:
     report: dict[str, Any] = {"path": str(db_path)}
     ledger = None
     try:
-        ledger = Ledger(db_path)
+        from .secrets import event_chain_key
+
+        ledger = Ledger(db_path, chain_key=event_chain_key())
     except Exception as exc:  # noqa: BLE001 - a report must not fail
         report["readable"] = False
         report["error"] = str(exc)
         return report
     try:
         status = ledger.status()
+        chain = ledger.verify_chain()
         tasks: dict[str, int] = {}
         for task in status["tasks"]:
             tasks[task["status"]] = tasks.get(task["status"], 0) + 1
@@ -54,6 +57,11 @@ def _ledger_report(db_path: str | Path) -> dict[str, Any]:
                 "session_count": len(status["sessions"]),
                 "failure_count": len(status["failures"]),
                 "profiles": status.get("profiles", []),
+                "chain": {
+                    "signed": chain["signed"],
+                    "ok": chain["ok"],
+                    "broken_at": chain["broken_at"],
+                },
                 "metrics": status["metrics"],
                 "bytes": Path(db_path).stat().st_size if Path(db_path).exists() else 0,
             }
@@ -184,6 +192,16 @@ def diagnose(
     if not ledger.get("readable"):
         notes.append("the ledger could not be read; run `flux init` to create one")
     else:
+        chain = ledger.get("chain", {})
+        if chain.get("signed") and not chain.get("ok"):
+            notes.append(
+                "the event chain does not verify; the log has been changed "
+                f"since it was written (at event {chain.get('broken_at')})"
+            )
+        elif not chain.get("signed"):
+            notes.append(
+                "the ledger is not signed; set FLUX_EVENT_KEY to make the event log tamper-evident"
+            )
         tasks = ledger.get("tasks", {})
         if tasks.get("blocked"):
             notes.append(

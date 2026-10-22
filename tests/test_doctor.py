@@ -1,11 +1,13 @@
 """The doctor: one report about the ledger, the project and the adapters."""
 
 import json
+import os
 import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 from fluxrecord.core import Ledger
 from fluxrecord.doctor import diagnose
@@ -102,6 +104,17 @@ class DoctorTest(unittest.TestCase):
         ledger.close()
         report = diagnose(self.db, self.project, self.sync_db)
         self.assertTrue(any("blocked" in note for note in report["notes"]))
+
+    def test_the_chain_state_is_reported(self):
+        report = diagnose(self.db, self.project, self.sync_db)
+        self.assertFalse(report["ledger"]["chain"]["signed"])
+        self.assertTrue(any("not signed" in note for note in report["notes"]))
+
+    def test_a_signed_ledger_is_reported_as_signed(self):
+        with mock.patch.dict(os.environ, {"FLUX_EVENT_KEY": "a-chain-key"}):
+            report = diagnose(self.db, self.project, self.sync_db)
+        self.assertTrue(report["ledger"]["chain"]["signed"])
+        self.assertTrue(report["ledger"]["chain"]["ok"])
 
     def test_the_environment_is_reported(self):
         report = diagnose(self.db, self.project, self.sync_db)
