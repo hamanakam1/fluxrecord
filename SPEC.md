@@ -228,9 +228,17 @@ flux route M-397001 --required-context 8000
 # GitHub sync
 flux github-poll --repo owner/repo --sync-db ~/.flux/github.sqlite
 flux github-publish --repo owner/repo --issue 123 --key summary --body "..."
+flux github-reconcile --repo owner/repo
+flux github-cycle --config cycle.json
 
 # Dashboard preview (local-only)
 flux dashboard-preview --url http://127.0.0.1:8080 --status planned --offset 0
+
+# Project files and the wordmark
+flux init --project .fluxrecord
+flux export --project .fluxrecord
+flux tools --history
+flux art --style large --color
 ```
 
 ---
@@ -256,6 +264,9 @@ outbox(repo, issue, key, body_hash, state, url)
 ---
 
 ## Ticket File Storage
+
+`flux export` writes this layout. The ledger remains the source of truth;
+these files are a projection of it, not a second copy of the state.
 
 ```
 .fluxrecord/
