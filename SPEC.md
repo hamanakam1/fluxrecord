@@ -252,6 +252,7 @@ flux sessions --active
 flux events --after 0 --type task.created
 flux watch --after 0 --once
 flux verify --signed
+flux compact --keep 100
 
 # GitHub sync
 flux github-poll --repo owner/repo --sync-db ~/.flux/github.sqlite
