@@ -18,7 +18,7 @@ class Conflict(ValueError):
     """An ownership, budget, or lifecycle constraint refused an operation."""
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: Additive, idempotent migrations. Each entry moves a database from the
 #: previous version to the next; nothing is ever dropped or rewritten.
@@ -34,6 +34,13 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "ALTER TABLE tasks ADD COLUMN owner TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE tasks ADD COLUMN seed_key TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE tasks ADD COLUMN updated_at REAL",
+        ),
+    ),
+    (
+        3,
+        (
+            # The specification calls the working station in_progress.
+            "UPDATE tasks SET status='in_progress' WHERE status='running'",
         ),
     ),
 )
@@ -315,7 +322,7 @@ class Ledger:
                 raise Conflict("task token budget exhausted across attempts")
             scopes = set(json.loads(task["scope"]))
             for row in self.db.execute(
-                "SELECT id,scope FROM tasks WHERE status IN ('running','blocked','review')"
+                "SELECT id,scope FROM tasks WHERE status IN ('in_progress','blocked','review')"
             ):
                 if scopes.intersection(json.loads(row["scope"])):
                     raise Conflict(f"resource scope reserved by {row['id']}")
@@ -325,7 +332,7 @@ class Ledger:
                 "INSERT INTO sessions(id,task_id,owner,status,lease_until,created) VALUES (?,?,?,'active',?,?)",
                 (sid, task_id, owner, now + lease_seconds, now),
             )
-            self.db.execute("UPDATE tasks SET status='running' WHERE id=?", (task_id,))
+            self.db.execute("UPDATE tasks SET status='in_progress' WHERE id=?", (task_id,))
             self._touch(task_id)
             self.event("session.started", task_id, session=sid, owner=owner)
         return {"session_id": sid, "task_id": task_id, "lease_until": now + lease_seconds}

@@ -125,6 +125,13 @@ INBOX → READY → IN_PROGRESS → BLOCKED? → REVIEW → ACCEPTED → DONE
 
 ## Status Values
 
+The ledger stores the status in lowercase, as the table below names them.
+A ticket is created `ready` — the ledger has no separate triage station,
+so `INBOX` is a station of the standard rather than a state the ledger
+holds. Acceptance is stored as `accepted` and the automatic move to `DONE`
+is recorded as a `task.done` event, so the gate and the transition are
+both visible.
+
 | Status | Meaning | Next Valid Transitions |
 |--------|---------|------------------------|
 | `inbox` | Created, not triaged | → `ready` |

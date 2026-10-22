@@ -69,10 +69,13 @@ flux export --project .fluxrecord
 
 ### Ticket Lifecycle
 ```
-INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
-                              ↑    ↓
-                              └─── retry (preserves tokens)
+READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
+               ↑    ↓
+               └─── retry (preserves tokens)
 ```
+
+A ticket is created ready to work. Acceptance is the gate: `finish()` only
+creates a review, and only an operator decision creates a done.
 
 ### Key Commands
 | Command | Purpose |

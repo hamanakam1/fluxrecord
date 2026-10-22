@@ -45,6 +45,24 @@ class SchemaTest(unittest.TestCase):
         self.assertEqual(task["tags"], [])
         ledger.close()
 
+    def test_an_older_database_is_migrated_to_the_new_vocabulary(self):
+        db = sqlite3.connect(self.path)
+        db.executescript(
+            "CREATE TABLE tasks (id TEXT PRIMARY KEY, objective TEXT NOT NULL,"
+            " acceptance TEXT NOT NULL, kind TEXT NOT NULL, scope TEXT NOT NULL,"
+            " status TEXT NOT NULL, token_budget INTEGER NOT NULL, created REAL NOT NULL);"
+        )
+        db.execute(
+            "INSERT INTO tasks VALUES ('M-1','old','old','code','[\"repo/a\"]','running',100,1.0)"
+        )
+        db.commit()
+        db.close()
+
+        ledger = Ledger(self.path)
+        self.assertEqual(ledger.task("M-1")["status"], "in_progress")
+        self.assertEqual(ledger.schema_version(), SCHEMA_VERSION)
+        ledger.close()
+
     def test_migrating_twice_is_idempotent(self):
         Ledger(self.path).close()
         ledger = Ledger(self.path)
@@ -104,6 +122,12 @@ class TicketModelTest(unittest.TestCase):
         for bad in (0, 4, "2", None):
             with self.assertRaises(ValueError):
                 self.add(task_id=f"M-{bad}", priority=bad)
+
+    def test_the_working_station_is_called_in_progress(self):
+        self.add()
+        started = self.ledger.start("M-1", "terminal-1")
+        self.assertEqual(self.ledger.task("M-1")["status"], "in_progress")
+        self.assertEqual(started["task_id"], "M-1")
 
     def test_a_duplicate_task_id_is_refused(self):
         self.add()
