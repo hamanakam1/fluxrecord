@@ -64,6 +64,9 @@ KINDS: tuple[str, ...] = tuple(_ENDPOINTS)
 
 _REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _TICKET = re.compile(r"\bM-\d{6}\b")
+# The key is written into the comment body as part of the marker, so it is
+# restricted to characters that cannot break the marker or the comment.
+_KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS observations (
@@ -319,6 +322,8 @@ class GitHubSync:
         _validate_repo(repo)
         if not key or len(key) > MAX_KEY_LENGTH:
             raise ValueError(f"key must be 1..{MAX_KEY_LENGTH} characters")
+        if not _KEY.fullmatch(key):
+            raise ValueError("key must be a plain token: letters, digits, . _ : -")
         if not body.strip():
             raise ValueError("body must be nonempty text")
         if issue <= 0:

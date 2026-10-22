@@ -93,6 +93,11 @@ class GitHubSyncTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.sync.enqueue("owner/repo", 1, "key", "   ")
 
+    def test_a_key_cannot_break_the_marker(self):
+        for bad in ("with space", "new\nline", "<!-- taskrivet:other -->", "semi;colon"):
+            with self.assertRaises(ValueError):
+                self.sync.enqueue("owner/repo", 7, bad, "body")
+
     def test_enqueue_is_idempotent_on_key(self):
         first = self.sync.enqueue("owner/repo", 7, "summary", "body one")
         second = self.sync.enqueue("owner/repo", 7, "summary", "body one")

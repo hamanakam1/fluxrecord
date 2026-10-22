@@ -24,7 +24,7 @@ __all__ = ["preview", "MAX_BYTES", "TIMEOUT_SECONDS", "LOOPBACK_HOSTS"]
 
 MAX_BYTES = 8 * 1024 * 1024
 TIMEOUT_SECONDS = 10
-LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"})
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 _STATUS_TOKEN = re.compile(r"[a-z][a-z0-9_-]*")
 
 
