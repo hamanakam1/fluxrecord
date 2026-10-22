@@ -69,7 +69,7 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--acceptance", required=True)
     a.add_argument("--kind", default="code")
     a.add_argument("--scope", action="append", required=True)
-    a.add_argument("--token-budget", type=int, default=8000)
+    a.add_argument("--token-budget", "--budget", dest="token_budget", type=int, default=8000)
 
     s = sub.add_parser("start")
     s.add_argument("task")
@@ -97,6 +97,11 @@ def parser() -> argparse.ArgumentParser:
         d = sub.add_parser(name)
         d.add_argument("task")
         d.add_argument("--reason", required=True)
+
+    d = sub.add_parser("decide", help="operator decision on a task")
+    d.add_argument("task")
+    d.add_argument("decision", choices=["accept", "retry", "cancel"])
+    d.add_argument("--reason", required=True)
 
     c = sub.add_parser("context-add")
     c.add_argument("task")
@@ -207,6 +212,8 @@ def main() -> None:
             result = ledger.finish(a.session, a.evidence)
         elif cmd in ("accept", "retry", "cancel"):
             result = ledger.decide(a.task, cmd, a.reason)
+        elif cmd == "decide":
+            result = ledger.decide(a.task, a.decision, a.reason)
         elif cmd == "context-add":
             result = ledger.add_context(
                 a.task, Path(a.file).read_text(), a.source, a.priority, a.ttl
