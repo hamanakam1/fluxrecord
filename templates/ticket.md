@@ -29,3 +29,10 @@ updated_at: "2026-10-21T00:00:00Z"
 
 ## Acceptance Criteria
 - [ ]
+
+## Evidence Log
+| Timestamp | Actor | Action | Evidence |
+|-----------|-------|--------|----------|
+
+## Failures
+- none

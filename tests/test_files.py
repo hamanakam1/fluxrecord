@@ -88,6 +88,16 @@ class FilesTest(unittest.TestCase):
         self.assertEqual(result["tasks"], 0)
         self.assertEqual(json.loads((self.project / "index.json").read_text()), {})
 
+    def test_the_rendered_ticket_has_every_section_of_the_template(self):
+        template = (Path(__file__).resolve().parent.parent / "templates" / "ticket.md").read_text()
+        headings = [line for line in template.splitlines() if line.startswith("## ")]
+        self.assertTrue(headings)
+        self.seed()
+        export(self.ledger, self.project)
+        rendered = (self.project / "tickets" / "M-397001.md").read_text()
+        for heading in headings:
+            self.assertIn(heading, rendered, heading)
+
     def test_a_ticket_without_evidence_still_renders(self):
         rendered = render_ticket(
             {
