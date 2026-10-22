@@ -505,6 +505,16 @@ updated_at: "2026-10-21T00:00:00Z"
 
 ---
 
+## The Wire Format
+
+The JSON this package emits is versioned separately from the package, and
+version 1 is frozen: the `ticket` and the `packet` may not change shape
+without a wire format bump and a major version.
+`docs/wire-format.schema.json` is the schema; `docs/identifiers.md` is
+the identifier registry; `docs/breaking-changes.md` is the policy.
+
+---
+
 ## Threat Model
 
 `docs/threat-model.md` names the assets, the actors, the boundaries that

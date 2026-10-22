@@ -436,6 +436,25 @@ who can write to one can write to the other.
 
 ---
 
+## The Standard
+
+The JSON this package emits is a contract with other tools, so it is
+versioned and frozen. `flux version` says which version it speaks.
+
+- [`docs/wire-format.schema.json`](docs/wire-format.schema.json) — the
+  frozen shapes, as a JSON Schema
+- [`docs/identifiers.md`](docs/identifiers.md) — the `M-` ranges and the
+  allocation rule
+- [`docs/breaking-changes.md`](docs/breaking-changes.md) — what counts as
+  a breaking change, how it is announced, and how long the old form is
+  read
+
+From wire format 1 onwards, changing the name of a field is a breaking
+change. The ticket and the packet are frozen; the board and the session
+list are views, and may grow a field.
+
+---
+
 ## Threat Model
 
 What fluxrecord protects, from whom, and what it has decided not to solve,

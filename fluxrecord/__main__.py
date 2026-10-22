@@ -462,8 +462,18 @@ def main() -> None:
 
         if a.command == "version":
             from . import __version__
+            from .wire import WIRE_FORMAT
 
-            print(json.dumps({"name": "fluxrecord", "version": __version__}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "name": "fluxrecord",
+                        "version": __version__,
+                        "wire_format": WIRE_FORMAT,
+                    },
+                    indent=2,
+                )
+            )
             return
 
         if a.command == "github-intake":

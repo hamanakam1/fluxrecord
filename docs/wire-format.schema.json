@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluxrecord.dev/wire-format/1",
+  "title": "fluxrecord wire format",
+  "description": "The JSON shapes other tools may rely on. Version 1 is frozen: changing a field name, or adding one to a frozen shape, is a breaking change.",
+  "x-wire-format": 1,
+  "$defs": {
+    "ticket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "objective",
+        "acceptance",
+        "kind",
+        "scope",
+        "status",
+        "token_budget",
+        "created",
+        "title",
+        "priority",
+        "tags",
+        "depends_on",
+        "blocks",
+        "owner",
+        "seed_key",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "objective": {
+          "type": "string"
+        },
+        "acceptance": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string"
+        },
+        "token_budget": {
+          "type": "integer"
+        },
+        "created": {
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owner": {
+          "type": "string"
+        },
+        "seed_key": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "number"
+        }
+      }
+    },
+    "packet": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "title",
+        "objective",
+        "acceptance",
+        "kind",
+        "scope",
+        "status",
+        "priority",
+        "tags",
+        "depends_on",
+        "owner",
+        "token_budget",
+        "failures",
+        "dependencies",
+        "scope_conflicts",
+        "trust",
+        "context"
+      ],
+      "properties": {
+        "task_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "objective": {
+          "type": "string"
+        },
+        "acceptance": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owner": {
+          "type": "string"
+        },
+        "token_budget": {
+          "type": "integer"
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "scope_conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "trust": {
+          "type": "string"
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "checkpoint": {
+          "type": "object"
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": [
+        "id",
+        "task_id",
+        "owner",
+        "status",
+        "lease_until",
+        "tokens"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "lease_until": {
+          "type": "number"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "created": {
+          "type": "number"
+        },
+        "progress": {
+          "type": "string"
+        },
+        "stagnant": {
+          "type": "integer"
+        },
+        "lease_remaining": {
+          "type": "number"
+        },
+        "expired": {
+          "type": "boolean"
+        }
+      }
+    },
+    "board_row": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status",
+        "priority",
+        "owner",
+        "age_seconds",
+        "tokens",
+        "last_evidence",
+        "failures"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "age_seconds": {
+          "type": "number"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "last_evidence": {
+          "type": "string"
+        },
+        "failures": {
+          "type": "integer"
+        },
+        "last_evidence_at": {
+          "type": "number"
+        },
+        "lease_remaining": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
