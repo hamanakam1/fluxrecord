@@ -17,6 +17,29 @@ class Conflict(ValueError):
     """An ownership, budget, or lifecycle constraint refused an operation."""
 
 
+SCHEMA_VERSION = 2
+
+#: Additive, idempotent migrations. Each entry moves a database from the
+#: previous version to the next; nothing is ever dropped or rewritten.
+_MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (
+        2,
+        (
+            "ALTER TABLE tasks ADD COLUMN title TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 2",
+            "ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE tasks ADD COLUMN depends_on TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE tasks ADD COLUMN blocks TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE tasks ADD COLUMN owner TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE tasks ADD COLUMN seed_key TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE tasks ADD COLUMN updated_at REAL",
+        ),
+    ),
+)
+
+_JSON_COLUMNS = ("scope", "tags", "depends_on", "blocks")
+
+
 def positive(value: Any, name: str) -> None:
     if type(value) is not int or value <= 0:
         raise ValueError(f"{name} must be a positive integer")
@@ -36,11 +59,21 @@ class Ledger:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA journal_mode=WAL")
+        fresh = (
+            self.db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+            ).fetchone()
+            is None
+        )
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY, objective TEXT NOT NULL, acceptance TEXT NOT NULL,
             kind TEXT NOT NULL, scope TEXT NOT NULL, status TEXT NOT NULL,
-            token_budget INTEGER NOT NULL, created REAL NOT NULL);
+            token_budget INTEGER NOT NULL, created REAL NOT NULL,
+            title TEXT NOT NULL DEFAULT '', priority INTEGER NOT NULL DEFAULT 2,
+            tags TEXT NOT NULL DEFAULT '[]', depends_on TEXT NOT NULL DEFAULT '[]',
+            blocks TEXT NOT NULL DEFAULT '[]', owner TEXT NOT NULL DEFAULT '',
+            seed_key TEXT NOT NULL DEFAULT '', updated_at REAL);
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id),
             owner TEXT NOT NULL, status TEXT NOT NULL, lease_until REAL NOT NULL,
@@ -69,6 +102,37 @@ class Ledger:
             seq INTEGER PRIMARY KEY, type TEXT NOT NULL, task_id TEXT,
             data TEXT NOT NULL, created REAL NOT NULL);
         """)
+        self._migrate(fresh)
+        self.db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS task_seed_key ON tasks(seed_key) WHERE seed_key <> ''"
+        )
+
+    def _migrate(self, fresh: bool) -> None:
+        """Move the database forward, additively and idempotently."""
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        row = self.db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        current = int(row["value"]) if row else 1
+        if fresh:
+            current = SCHEMA_VERSION
+        else:
+            for version, statements in _MIGRATIONS:
+                if version <= current:
+                    continue
+                for statement in statements:
+                    self.db.execute(statement)
+                current = version
+        self.db.execute(
+            "INSERT INTO meta(key,value) VALUES('schema_version',?)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(current),),
+        )
+
+    def schema_version(self) -> int:
+        """The schema version this database is running."""
+        row = self.db.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        return int(row["value"]) if row else 1
 
     def close(self) -> None:
         self.db.close()
@@ -95,6 +159,21 @@ class Ledger:
             raise ValueError(f"unknown task: {task_id}")
         return dict(row)
 
+    def _decode(self, row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        """Decode the JSON columns of a task row for display."""
+        view = dict(row)
+        for field in _JSON_COLUMNS:
+            if field in view and isinstance(view[field], str):
+                try:
+                    view[field] = json.loads(view[field])
+                except json.JSONDecodeError:
+                    pass
+        return view
+
+    def task_view(self, task_id: str) -> dict[str, Any]:
+        """A task as it appears on the wire: JSON columns decoded."""
+        return self._decode(self.task(task_id))
+
     def add_task(
         self,
         task_id: str,
@@ -103,6 +182,13 @@ class Ledger:
         kind: str = "code",
         scope: list[str] | None = None,
         token_budget: int = 8000,
+        title: str = "",
+        priority: int = 2,
+        tags: list[str] | None = None,
+        depends_on: list[str] | None = None,
+        blocks: list[str] | None = None,
+        owner: str = "",
+        seed_key: str = "",
     ) -> dict[str, Any]:
         for value, name in [
             (task_id, "id"),
@@ -112,14 +198,38 @@ class Ledger:
         ]:
             required(value, name)
         positive(token_budget, "token_budget")
+        if type(priority) is not int or priority not in (1, 2, 3):
+            raise ValueError("priority must be 1, 2, or 3")
+        if seed_key and len(seed_key) > 100:
+            raise ValueError("seed_key must be at most 100 characters")
         scope = scope or [task_id]
         if not isinstance(scope, list) or not scope:
             raise ValueError("scope must be a nonempty list of resource keys")
         for key in scope:
             required(key, "scope key")
+        for name, values in (
+            ("tags", tags),
+            ("depends_on", depends_on),
+            ("blocks", blocks),
+        ):
+            for value in values or []:
+                required(value, f"{name} entry")
+        if seed_key:
+            seeded = self.db.execute(
+                "SELECT id FROM tasks WHERE seed_key=?", (seed_key,)
+            ).fetchone()
+            if seeded:
+                if seeded["id"] != task_id:
+                    raise ValueError(f"seed key already used by {seeded['id']}")
+                return self.task_view(task_id)
+        if self.db.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
+            raise ValueError(f"task already exists: {task_id}")
+        now = time.time()
         with self.transaction():
             self.db.execute(
-                "INSERT INTO tasks VALUES (?,?,?,?,?,'ready',?,?)",
+                "INSERT INTO tasks(id,objective,acceptance,kind,scope,status,token_budget,"
+                "created,title,priority,tags,depends_on,blocks,owner,seed_key,updated_at)"
+                " VALUES (?,?,?,?,?,'ready',?,?,?,?,?,?,?,?,?,?)",
                 (
                     task_id,
                     objective,
@@ -127,11 +237,23 @@ class Ledger:
                     kind,
                     json.dumps(sorted(set(scope))),
                     token_budget,
-                    time.time(),
+                    now,
+                    title or objective,
+                    priority,
+                    json.dumps(tags or []),
+                    json.dumps(depends_on or []),
+                    json.dumps(blocks or []),
+                    owner,
+                    seed_key,
+                    now,
                 ),
             )
             self.event("task.created", task_id)
-        return self.task(task_id)
+        return self.task_view(task_id)
+
+    def _touch(self, task_id: str) -> None:
+        """Stamp the task as changed."""
+        self.db.execute("UPDATE tasks SET updated_at=? WHERE id=?", (time.time(), task_id))
 
     def _failure(self, task: str, session: str, category: str, summary: str) -> None:
         digest = hashlib.sha256(f"{category}:{summary}".encode()).hexdigest()[:16]
@@ -185,6 +307,7 @@ class Ledger:
                 (sid, task_id, owner, now + lease_seconds, now),
             )
             self.db.execute("UPDATE tasks SET status='running' WHERE id=?", (task_id,))
+            self._touch(task_id)
             self.event("session.started", task_id, session=sid, owner=owner)
         return {"session_id": sid, "task_id": task_id, "lease_until": now + lease_seconds}
 
@@ -253,6 +376,7 @@ class Ledger:
                 self.db.execute(
                     "UPDATE tasks SET status='blocked' WHERE id=?", (session["task_id"],)
                 )
+                self._touch(session["task_id"])
                 self._failure(
                     session["task_id"],
                     sid,
@@ -271,6 +395,7 @@ class Ledger:
             session = self._session(sid)
             self.db.execute("UPDATE sessions SET status='failed' WHERE id=?", (sid,))
             self.db.execute("UPDATE tasks SET status='blocked' WHERE id=?", (session["task_id"],))
+            self._touch(session["task_id"])
             self._failure(session["task_id"], sid, category, summary)
         return {"status": "blocked"}
 
@@ -285,6 +410,7 @@ class Ledger:
                 raise Conflict("record a checkpoint with usage and evidence before finishing")
             self.db.execute("UPDATE sessions SET status='finished' WHERE id=?", (sid,))
             self.db.execute("UPDATE tasks SET status='review' WHERE id=?", (session["task_id"],))
+            self._touch(session["task_id"])
             self.event("session.finished", session["task_id"], session=sid, evidence=evidence)
         return {"status": "review"}
 
@@ -304,6 +430,7 @@ class Ledger:
                 raise Conflict(f"cannot {decision} a {task['status']} task")
             status = {"accept": "accepted", "retry": "ready", "cancel": "cancelled"}[decision]
             self.db.execute("UPDATE tasks SET status=? WHERE id=?", (status, task_id))
+            self._touch(task_id)
             self.event("operator." + decision, task_id, reason=reason)
         return {"status": status}
 
@@ -442,7 +569,9 @@ class Ledger:
     def status(self) -> dict[str, Any]:
         self.reconcile()
         return {
-            "tasks": [dict(r) for r in self.db.execute("SELECT * FROM tasks ORDER BY created")],
+            "tasks": [
+                self._decode(r) for r in self.db.execute("SELECT * FROM tasks ORDER BY created")
+            ],
             "sessions": [
                 dict(r) for r in self.db.execute("SELECT * FROM sessions ORDER BY created")
             ],

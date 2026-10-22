@@ -70,6 +70,13 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--kind", default="code")
     a.add_argument("--scope", action="append", required=True)
     a.add_argument("--token-budget", "--budget", dest="token_budget", type=int, default=8000)
+    a.add_argument("--title", default="")
+    a.add_argument("--priority", type=int, default=2, help="1=P1-Now, 2=P2-Next, 3=P3-Later")
+    a.add_argument("--tag", dest="tags", action="append", default=None)
+    a.add_argument("--depends-on", dest="depends_on", action="append", default=None)
+    a.add_argument("--blocks", action="append", default=None)
+    a.add_argument("--owner", default="")
+    a.add_argument("--seed-key", dest="seed_key", default="", help="idempotent seeding key")
 
     s = sub.add_parser("start")
     s.add_argument("task")
@@ -200,7 +207,19 @@ def main() -> None:
             result = ledger.status()
         elif cmd == "task-add":
             result = ledger.add_task(
-                a.id, a.objective, a.acceptance, a.kind, a.scope, a.token_budget
+                a.id,
+                a.objective,
+                a.acceptance,
+                a.kind,
+                a.scope,
+                a.token_budget,
+                title=a.title,
+                priority=a.priority,
+                tags=a.tags,
+                depends_on=a.depends_on,
+                blocks=a.blocks,
+                owner=a.owner,
+                seed_key=a.seed_key,
             )
         elif cmd == "start":
             result = ledger.start(a.task, a.owner, a.lease)
