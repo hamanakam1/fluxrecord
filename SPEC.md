@@ -236,6 +236,7 @@ flux cancel M-397001 --reason "..."
 flux context-add M-397001 --file ./README.md --source "repo readme" --priority 10
 flux pack M-397001 --max-bytes 12000 --packet-only
 flux pack M-397001 --since sha256:<hash of a packet sent before>
+flux benchmark M-397001 --root .
 
 # Routing & profiles
 flux profile-add local-coder --kind code --context-limit 16000 --cost zero_incremental --requires git

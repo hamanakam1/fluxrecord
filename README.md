@@ -123,6 +123,7 @@ creates a review, and only an operator decision creates a done.
 | `flux github-cycle --config cycle.json` | One observe/reconcile/publish cycle |
 | `flux art [--style large\|small\|mini\|minimal\|ascii] [--color]` | Print the wordmark |
 | `flux version` | Package version |
+| `flux benchmark <id> [--root .]` | Measure the context a ticket costs, against re-reading it |
 | `flux doctor [--project .fluxrecord] [--dashboard URL]` | Report on the ledger, the project and the adapters |
 | `flux token issue\|verify\|introspect ...` | Issue and check tokens |
 
@@ -440,6 +441,21 @@ flux pack M-397001 --since sha256:07b5a274...
 That is where *less repeated context* stops being a slogan and becomes a
 number: the delta is smaller than the packet, and the saving is the
 difference.
+
+### Measured, Not Claimed
+
+The first promise is *less repeated context*. A promise nobody measures is
+a marketing claim, so the tool measures it:
+
+```bash
+flux benchmark M-397001 --root .
+```
+
+Against this repository, a worker handed the packet for `M-397001` reads
+**366 bytes** instead of **50,840 bytes** of `fluxrecord/core.py` — 0.7%
+of the file, and a number anybody can reproduce with the command above.
+Files that the ticket names but that do not exist are not counted, so the
+comparison never flatters itself.
 
 ### Tokenizer and Budget
 

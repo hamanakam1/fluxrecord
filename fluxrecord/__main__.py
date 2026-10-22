@@ -73,6 +73,12 @@ def parser() -> argparse.ArgumentParser:
     look.add_argument("--issuer", default="")
     look.add_argument("--audience", default="")
 
+    bench = sub.add_parser(
+        "benchmark", help="measure the context a ticket costs, against re-reading it"
+    )
+    bench.add_argument("task")
+    bench.add_argument("--root", default=".", help="the directory the scope paths are relative to")
+
     doc = sub.add_parser("doctor", help="report on the ledger, the project and the adapters")
     doc.add_argument("--project", default=".fluxrecord")
     doc.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
@@ -383,6 +389,14 @@ def main() -> None:
                     ensure_ascii=False,
                 )
             )
+            return
+
+        if a.command == "benchmark":
+            from .benchmark import measure
+            from .core import Ledger
+
+            with Ledger(a.db, tokenizer=tokenizer) as book:
+                print(json.dumps(measure(book, a.task, a.root), indent=2, ensure_ascii=False))
             return
 
         if a.command == "doctor":
