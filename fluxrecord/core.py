@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 import sqlite3
@@ -18,7 +19,7 @@ class Conflict(ValueError):
     """An ownership, budget, or lifecycle constraint refused an operation."""
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 #: Additive, idempotent migrations. Each entry moves a database from the
 #: previous version to the next; nothing is ever dropped or rewritten.
@@ -48,6 +49,13 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
         (
             # Profiles declare the tools they need.
             "ALTER TABLE profiles ADD COLUMN requires TEXT NOT NULL DEFAULT '[]'",
+        ),
+    ),
+    (
+        6,
+        (
+            # Each event carries the digest of the one before it.
+            "ALTER TABLE events ADD COLUMN digest TEXT NOT NULL DEFAULT ''",
         ),
     ),
     (
@@ -102,6 +110,7 @@ class Ledger:
         self,
         path: str | Path,
         tokenizer: Callable[[str], int] | None = None,
+        chain_key: str | bytes | None = None,
     ) -> None:
         path = Path(path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -109,6 +118,9 @@ class Ledger:
         # A tokenizer is injected, never imported: the core stays stdlib-only
         # and the plug-in boundary stays a boundary.
         self.tokenizer = tokenizer
+        # A chain key makes the event log tamper-evident. It is off by
+        # default: a ledger that nobody signs is still a ledger.
+        self.chain_key = chain_key
         try:
             self._prepare(path)
         except BaseException:
@@ -156,7 +168,8 @@ class Ledger:
             requires TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE IF NOT EXISTS events (
             seq INTEGER PRIMARY KEY, type TEXT NOT NULL, task_id TEXT,
-            data TEXT NOT NULL, created REAL NOT NULL);
+            data TEXT NOT NULL, created REAL NOT NULL,
+            digest TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS packets (
             id INTEGER PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id),
             hash TEXT NOT NULL, created REAL NOT NULL, checkpoint_id INTEGER,
@@ -239,9 +252,136 @@ class Ledger:
             raise
 
     def event(self, kind: str, task: str | None, **data: Any) -> None:
+        payload = json.dumps(data, sort_keys=True)
+        created = time.time()
+        digest = self._digest(kind, task, payload, created)
         self.db.execute(
-            "INSERT INTO events(type,task_id,data,created) VALUES (?,?,?,?)",
-            (kind, task, json.dumps(data, sort_keys=True), time.time()),
+            "INSERT INTO events(type,task_id,data,created,digest) VALUES (?,?,?,?,?)",
+            (kind, task, payload, created, digest),
+        )
+        if digest:
+            # The head of the chain is recorded beside the log, so that
+            # truncating the end of the log is detectable. A chain is a
+            # prefix: without this, dropping the last few events would
+            # leave a perfectly valid chain over what was left.
+            self.db.execute(
+                "INSERT INTO meta(key,value) VALUES('chain_head',?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (digest,),
+            )
+
+    def _digest(
+        self,
+        kind: str,
+        task: str | None,
+        payload: str,
+        created: float,
+        previous: str | None = None,
+    ) -> str:
+        """The digest of one event, chained to the one before it.
+
+        With no chain key the digest is empty: the log is not signed, and
+        says so by having nothing to check.
+        """
+        if self.chain_key is None:
+            return ""
+        key = self.chain_key.encode("utf-8") if isinstance(self.chain_key, str) else self.chain_key
+        if previous is None:
+            row = self.db.execute("SELECT digest FROM events ORDER BY seq DESC LIMIT 1").fetchone()
+            previous = str(row["digest"]) if row is not None else ""
+        material = f"{previous}|{kind}|{task or ''}|{payload}|{created}".encode()
+        return hmac.new(key, material, hashlib.sha256).hexdigest()
+
+    def verify_chain(self) -> dict[str, Any]:
+        """Check the event chain, and say where it breaks if it does.
+
+        A signed ledger makes a silent edit detectable: the digest of an
+        event covers the digest of the one before it, so changing an event
+        in the middle invalidates everything after it.
+        """
+        events = self.db.execute("SELECT * FROM events ORDER BY seq").fetchall()
+        if not events:
+            return {
+                "signed": self.chain_key is not None,
+                "ok": True,
+                "events": 0,
+                "broken_at": None,
+            }
+        if self.chain_key is None:
+            return {
+                "signed": False,
+                "ok": True,
+                "events": len(events),
+                "broken_at": None,
+                "note": "The ledger is not signed, so the log cannot be checked.",
+            }
+        previous = ""
+        for index, event in enumerate(events):
+            expected = self._digest(
+                str(event["type"]),
+                event["task_id"],
+                str(event["data"]),
+                float(event["created"]),
+                previous if previous or index else "",
+            )
+            if not str(event["digest"]):
+                return {
+                    "signed": True,
+                    "ok": False,
+                    "events": len(events),
+                    "broken_at": int(event["seq"]),
+                    "reason": "written before the ledger was signed",
+                    "note": "The chain starts here: this event was written while "
+                    "the ledger was unsigned, so there is nothing to check it "
+                    "against.",
+                }
+            if expected != str(event["digest"]):
+                return {
+                    "signed": True,
+                    "ok": False,
+                    "events": len(events),
+                    "broken_at": int(event["seq"]),
+                    "reason": "changed after it was written",
+                    "note": "The chain breaks here: this event, or one before it, "
+                    "was changed after it was written.",
+                }
+            previous = str(event["digest"])
+        return {
+            "signed": True,
+            "ok": self._head_matches(events),
+            "events": len(events),
+            "broken_at": None,
+            "head": str(events[-1]["digest"]) if events else "",
+            "note": self._head_note(events),
+        }
+
+    def _recorded_head(self) -> str:
+        """The head of the chain, as recorded when the last event was
+        written."""
+        row = self.db.execute("SELECT value FROM meta WHERE key='chain_head'").fetchone()
+        return str(row["value"]) if row is not None else ""
+
+    def _head_matches(self, events: list[Any]) -> bool:
+        """Whether the log still ends where it was recorded to end.
+
+        A chain is a prefix, so a log that has been truncated at the end
+        still verifies over what is left. The recorded head catches that,
+        unless whoever truncated the log also updated the head — which
+        they can, because the head is in the same file.
+        """
+        recorded = self._recorded_head()
+        if not recorded:
+            return True
+        actual = str(events[-1]["digest"]) if events else ""
+        return actual == recorded
+
+    def _head_note(self, events: list[Any]) -> str:
+        if self._head_matches(events):
+            return "Every event matches the digest of the one before it."
+        return (
+            "Every event matches the digest of the one before it, but the log no "
+            "longer ends where it was recorded to end: events were removed from "
+            "the end, or the recorded head was changed."
         )
 
     def task(self, task_id: str) -> dict[str, Any]:

@@ -12,15 +12,10 @@ comes from FLUX_TOKEN_SECRET, or from a file the operator names.
 
 from __future__ import annotations
 
-import os
 import time
-from pathlib import Path
 from typing import Any
 
 __all__ = ["secret_from_environment", "issue_token", "verify_token", "introspect_token"]
-
-_SECRET_ENV = "FLUX_TOKEN_SECRET"
-_SECRET_FILE_ENV = "FLUX_TOKEN_SECRET_FILE"
 
 
 def secret_from_environment() -> str:
@@ -29,16 +24,9 @@ def secret_from_environment() -> str:
     Raises:
         ValueError: no secret was configured
     """
-    secret = os.environ.get(_SECRET_ENV, "")
-    if secret:
-        return secret
-    path = os.environ.get(_SECRET_FILE_ENV, "")
-    if path:
-        try:
-            return Path(path).expanduser().read_text().strip()
-        except OSError as exc:
-            raise ValueError(f"cannot read the secret file: {exc}") from exc
-    raise ValueError(f"no signing secret: set {_SECRET_ENV}, or point {_SECRET_FILE_ENV} at a file")
+    from .secrets import token_secret
+
+    return token_secret()
 
 
 def issue_token(

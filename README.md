@@ -97,6 +97,7 @@ creates a review, and only an operator decision creates a done.
 | `flux handoff <sid> --to <owner> --reason "..."` | Hand a lease to another worker |
 | `flux adopt <sid> --owner <owner> --reason "..."` | Take over a lease whose owner has gone away |
 | `flux watch [--after N] [--once] [--json]` | Print new events as they land |
+| `flux verify [--signed]` | Check that the event log has not been edited |
 | `flux reconcile` | Expire leases that have run out |
 | `flux fail <sid> --category tool --summary "..."` | Record failure |
 | `flux finish <sid> --evidence "..."` | Request review |
@@ -407,6 +408,23 @@ a table in the same file the reader has open:
 flux watch              # print new events as they land
 flux watch --json       # one JSON object per event
 ```
+
+---
+
+## Tamper-Evidence
+
+A ledger on a shared volume can be edited by anyone with write access.
+Give it a chain key and every event carries the digest of the one before
+it, so a silent edit is detectable:
+
+```bash
+export FLUX_EVENT_KEY=...      # never pass a secret as an argument
+flux verify                    # "ok": true
+flux verify --signed           # fails when the ledger is not signed
+```
+
+The chain is off by default: a ledger nobody signs is still a ledger, and
+`flux verify` says so rather than pretending to have checked something.
 
 ---
 

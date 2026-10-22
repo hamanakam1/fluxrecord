@@ -251,6 +251,7 @@ flux show M-397001
 flux sessions --active
 flux events --after 0 --type task.created
 flux watch --after 0 --once
+flux verify --signed
 
 # GitHub sync
 flux github-poll --repo owner/repo --sync-db ~/.flux/github.sqlite
@@ -344,6 +345,19 @@ across them either. The supported arrangements are:
 The rule underneath all three: the ledger is the source of truth for
 *that* ledger, and anything shared between ledgers travels as
 observations and comments — never as a shared database file.
+
+## Tamper-Evidence
+
+The ledger is a plain SQLite file, so anyone with write access can change
+a status. With a chain key, every event carries an HMAC-SHA256 digest of
+the one before it, so an edit made after the fact is detectable:
+
+    verify_chain() -> {"signed": true, "ok": false, "broken_at": 42}
+
+The chain is off by default and the key never appears as an argument: it
+comes from `FLUX_EVENT_KEY`, or from a file `FLUX_EVENT_KEY_FILE` names.
+A ledger nobody signed is still a ledger, and `flux verify` says it cannot
+be checked rather than implying that it was.
 
 ---
 

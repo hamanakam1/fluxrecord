@@ -73,6 +73,9 @@ def parser() -> argparse.ArgumentParser:
     look.add_argument("--issuer", default="")
     look.add_argument("--audience", default="")
 
+    ver = sub.add_parser("verify", help="check that the event log has not been edited")
+    ver.add_argument("--signed", action="store_true", help="fail when the ledger is not signed")
+
     wat = sub.add_parser("watch", help="print new events as they land")
     wat.add_argument("--after", type=int, default=0)
     wat.add_argument("--interval", type=float, default=1.0)
@@ -298,6 +301,20 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
+def open_ledger(path: str, **kwargs: Any) -> Any:
+    """The ledger, chained when a signing key is configured.
+
+    The key comes from the environment, or from a file that the
+    environment names, and never from an argument: a secret in an argument
+    is a secret in the shell history and in the process table. A ledger
+    with no key is not chained, and says so.
+    """
+    from .core import Ledger
+    from .secrets import event_chain_key
+
+    return Ledger(path, chain_key=event_chain_key(), **kwargs)
+
+
 def main() -> None:
     a = parser().parse_args()
     ledger = None
@@ -328,12 +345,11 @@ def main() -> None:
             return
 
         if a.command == "dashboard-intake":
-            from .core import Ledger
             from .dashboard import preview
             from .intake import intake_dashboard
 
             seen = preview(a.url, a.status, a.offset, a.token)
-            ledger = Ledger(a.db)
+            ledger = open_ledger(a.db)
             try:
                 print(
                     json.dumps(
@@ -358,13 +374,12 @@ def main() -> None:
             print(json.dumps(inventory(a.history, a.limit), indent=2))
             return
 
-        from .core import Ledger
         from .tokenizers import current as current_tokenizer
 
         tokenizer = current_tokenizer()
 
         if a.command == "events":
-            ledger = Ledger(a.db)
+            ledger = open_ledger(a.db)
             print(
                 json.dumps(
                     ledger.events(a.after, a.kind, a.task_id, a.limit),
@@ -408,10 +423,18 @@ def main() -> None:
             )
             return
 
+        if a.command == "verify":
+            with open_ledger(a.db) as book:
+                report = book.verify_chain()
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            if not report["ok"] or (a.signed and not report["signed"]):
+                raise SystemExit(2)
+            return
+
         if a.command == "watch":
             from .watch import watch, watch_json
 
-            with Ledger(a.db, tokenizer=tokenizer) as book:
+            with open_ledger(a.db, tokenizer=tokenizer) as book:
                 if a.json:
                     watch_json(book, a.after, a.interval, a.limit, a.once)
                 else:
@@ -420,9 +443,8 @@ def main() -> None:
 
         if a.command == "benchmark":
             from .benchmark import measure
-            from .core import Ledger
 
-            with Ledger(a.db, tokenizer=tokenizer) as book:
+            with open_ledger(a.db, tokenizer=tokenizer) as book:
                 print(json.dumps(measure(book, a.task, a.root), indent=2, ensure_ascii=False))
             return
 
@@ -445,12 +467,11 @@ def main() -> None:
             return
 
         if a.command == "github-intake":
-            from .core import Ledger
             from .github_sync import GitHubSync
             from .intake import intake
 
             sync = GitHubSync(a.sync_db)
-            ledger = Ledger(a.db)
+            ledger = open_ledger(a.db)
             try:
                 intake_result = intake(
                     ledger,
@@ -475,11 +496,10 @@ def main() -> None:
 
         if a.command == "init":
             from .ascii_art import get_art
-            from .core import Ledger
             from .files import scaffold
 
             layout = scaffold(a.project)
-            ledger = Ledger(a.db)
+            ledger = open_ledger(a.db)
             try:
                 schema = ledger.schema_version()
             finally:
@@ -496,10 +516,9 @@ def main() -> None:
             return
 
         if a.command == "export":
-            from .core import Ledger
             from .files import export
 
-            ledger = Ledger(a.db)
+            ledger = open_ledger(a.db)
             try:
                 print(json.dumps(export(ledger, a.project), indent=2, ensure_ascii=False))
             finally:
@@ -507,10 +526,9 @@ def main() -> None:
             return
 
         if a.command == "import":
-            from .core import Ledger
             from .importer import import_csv
 
-            ledger = Ledger(a.db)
+            ledger = open_ledger(a.db)
             try:
                 print(
                     json.dumps(
@@ -523,7 +541,7 @@ def main() -> None:
                 ledger.close()
             return
 
-        ledger = Ledger(a.db, tokenizer=tokenizer)
+        ledger = open_ledger(a.db, tokenizer=tokenizer)
         cmd = a.command
         result: dict[str, Any]
 
