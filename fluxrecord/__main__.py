@@ -46,6 +46,7 @@ def parser() -> argparse.ArgumentParser:
     lst.add_argument("--tag")
     lst.add_argument("--scope")
     lst.add_argument("--limit", type=int, default=100)
+    lst.add_argument("--compact", action="store_true", help="one readable row per ticket")
 
     sub.add_parser("version", help="print the package version")
 
@@ -486,6 +487,7 @@ def main() -> None:
                 a.tag,
                 a.scope,
                 a.limit,
+                a.compact,
             )
             result = {
                 "tickets": tickets,

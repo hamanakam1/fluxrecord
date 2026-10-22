@@ -79,7 +79,7 @@ class DoneTest(unittest.TestCase):
         self.ledger.checkpoint(started["session_id"], "s", "e", "n", 10)
         self.ledger.finish(started["session_id"], "evidence")
         decided = self.ledger.decide("M-1", "accept", "reviewed")
-        self.assertEqual(decided["status"], "accepted")
+        self.assertEqual(decided["status"], "done")
         kinds = [event["type"] for event in self.ledger.events()]
         self.assertIn("operator.accept", kinds)
         self.assertIn("task.done", kinds)

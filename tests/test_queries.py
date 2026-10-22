@@ -64,6 +64,23 @@ class ListTest(unittest.TestCase):
     def test_the_limit_is_respected(self):
         self.assertEqual(len(self.ledger.list_tasks(limit=1)), 1)
 
+    def test_a_compact_list_is_a_row_per_ticket(self):
+        rows = self.ledger.list_tasks(compact=True)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["id"], "M-1")
+        self.assertEqual(rows[0]["status"], "ready")
+        self.assertIn("checkpoints", rows[0])
+        self.assertNotIn("seed_key", rows[0])
+
+    def test_a_compact_row_counts_what_is_attached(self):
+        started = self.ledger.start("M-1", "terminal-1")
+        self.ledger.checkpoint(started["session_id"], "s", "e", "n", 10)
+        self.ledger.add_context("M-1", "context", "note")
+        row = self.ledger.list_tasks(compact=True)[0]
+        self.assertEqual(row["checkpoints"], 1)
+        self.assertEqual(row["contexts"], 1)
+        self.assertEqual(row["owner"], "terminal-1")
+
 
 class ProfileTest(unittest.TestCase):
     def setUp(self):

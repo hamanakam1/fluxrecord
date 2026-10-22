@@ -103,7 +103,7 @@ creates a review, and only an operator decision creates a done.
 | `flux export [--project .fluxrecord]` | Write tickets and evidence as files |
 | `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
 | `flux status` | Ledger state, metrics and failure history |
-| `flux list [--status S] [--priority N] [--tag T] [--scope S] [--owner O]` | List tickets with filters |
+| `flux list [--status S] [--priority N] [--tag T] [--scope S] [--owner O] [--compact]` | List tickets with filters |
 | `flux show <id>` | One ticket with its sessions, checkpoints, failures and events |
 | `flux events [--after N] [--type T] [--task ID] [--limit N]` | The event log, as JSON |
 | `flux sessions [--active]` | Who is holding what, and how much lease is left |
@@ -422,7 +422,7 @@ flux finish <sid> --evidence "All endpoints tested; diff abc123"
 # → status: review
 
 flux decide M-397001 accept --reason "Reviewed diff and tests"
-# → status: accepted → DONE
+# → status: done
 ```
 
 ---

@@ -26,9 +26,26 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   declares no runtime dependencies. The check has its own tests, so a gate
   that cannot fail is caught before it starts passing everything, and it
   runs as a named step in CI.
+- **The specification is checked against the code.**
+  `tests/test_spec_conformance.py` parses `SPEC.md` and compares it with
+  the implementation: the statuses the ledger can hold, the statuses the
+  specification defines, the transitions it names, the status each operator
+  decision produces, the failure taxonomy, the ticket schema, and the
+  command list in both directions. The standard is the product, and it had
+  drifted from the code five separate times.
 
 ### Changed
 
+- **The acceptance gate now stores `done`.** `decide(accept)` leaves a
+  ticket in `done` rather than `accepted`, which is what the specification
+  has always promised — "only `decide(accept)` creates `done`". The
+  acceptance itself is still recorded, as an `operator.accept` event
+  followed by a `task.done` event, so nothing is lost from the log.
+  `metrics.accepted` counts both spellings, so a ledger written before the
+  change still reports the right number. **This is a behaviour change for
+  anything that reads `status == "accepted"`.**
+- `INBOX` is no longer a station. A ticket is created `ready`; a station
+  that nothing can enter is decoration.
 - The README now shows the ticket lifecycle and a gallery of the commands,
   and points at `PLAN.md` for the long-term view.
 - `CONTRIBUTING.md` explains the boundary check and what to do when a change
@@ -36,6 +53,7 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 - The documentation site has a "See it work" section that shows the real
   CLI: the whole ticket loop, a failure that is a record, and the bounded
   context packet.
+- The screenshots are regenerated, so they show the current output.
 
 ## [0.2.0] — 2026-10-22
 

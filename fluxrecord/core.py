@@ -509,12 +509,17 @@ class Ledger:
             }
             if task["status"] not in allowed[decision]:
                 raise Conflict(f"cannot {decision} a {task['status']} task")
-            status = {"accept": "accepted", "retry": "ready", "cancel": "cancelled"}[decision]
+            # Acceptance is the gate, and DONE follows automatically: the
+            # specification says only decide(accept) creates done, so the
+            # stored status of accepted work is done.
+            status = {"accept": "done", "retry": "ready", "cancel": "cancelled"}[decision]
             self.db.execute("UPDATE tasks SET status=? WHERE id=?", (status, task_id))
             self._touch(task_id)
             self.event("operator." + decision, task_id, reason=reason)
             if decision == "accept":
-                # Acceptance is the gate; DONE follows automatically.
+                # The acceptance is recorded as its own event, so the
+                # accepted station is visible in the log even though the
+                # stored status has already moved on to done.
                 self.event("task.done", task_id, reason=reason)
         return {"status": status}
 
@@ -736,8 +741,13 @@ class Ledger:
         tag: str | None = None,
         scope: str | None = None,
         limit: int = 100,
+        compact: bool = False,
     ) -> list[dict[str, Any]]:
-        """Tickets matching the given filters, oldest first."""
+        """Tickets matching the given filters, oldest first.
+
+        With compact, each ticket is a row a person can read in a list:
+        what it is, where it stands, and what is attached to it.
+        """
         rows = self.db.execute("SELECT * FROM tasks ORDER BY created").fetchall()
         found = [self._decode(row) for row in rows]
         if status:
@@ -752,7 +762,44 @@ class Ledger:
             found = [task for task in found if tag in (task.get("tags") or [])]
         if scope:
             found = [task for task in found if scope in (task.get("scope") or [])]
-        return found[:limit]
+        found = found[:limit]
+        if not compact:
+            return found
+        return [self._row(task) for task in found]
+
+    def _row(self, task: dict[str, Any]) -> dict[str, Any]:
+        """One ticket as a row in a work queue."""
+        task_id = str(task["id"])
+        session = self.db.execute(
+            "SELECT owner,status,lease_until FROM sessions WHERE task_id=? AND status='active'",
+            (task_id,),
+        ).fetchone()
+        failures = self.db.execute(
+            "SELECT COUNT(*) AS n FROM failures WHERE task_id=?", (task_id,)
+        ).fetchone()["n"]
+        checkpoints = self.db.execute(
+            "SELECT COUNT(*) AS n FROM checkpoints c JOIN sessions s ON s.id=c.session_id"
+            " WHERE s.task_id=?",
+            (task_id,),
+        ).fetchone()["n"]
+        contexts = self.db.execute(
+            "SELECT COUNT(*) AS n FROM task_context WHERE task_id=?", (task_id,)
+        ).fetchone()["n"]
+        return {
+            "id": task_id,
+            "title": task.get("title", ""),
+            "status": task.get("status", ""),
+            "priority": task.get("priority", 2),
+            "kind": task.get("kind", ""),
+            "owner": task.get("owner", "") or (session["owner"] if session else ""),
+            "scope": task.get("scope") or [],
+            "tags": task.get("tags") or [],
+            "depends_on": task.get("depends_on") or [],
+            "checkpoints": checkpoints,
+            "failures": failures,
+            "contexts": contexts,
+            "updated_at": task.get("updated_at", 0),
+        }
 
     def dependencies_of(self, task_id: str) -> list[dict[str, Any]]:
         """The tickets this one depends on, and where each of them stands."""
@@ -888,8 +935,11 @@ class Ledger:
                 for row in self.db.execute("SELECT * FROM profiles ORDER BY id")
             ],
             "metrics": {
+                # Accepted work is work that reached the gate. The stored
+                # status is done; accepted is counted too, so the number
+                # survives a ledger written before the transition existed.
                 "accepted": self.db.execute(
-                    "SELECT COUNT(*) FROM tasks WHERE status='accepted'"
+                    "SELECT COUNT(*) FROM tasks WHERE status IN ('accepted','done')"
                 ).fetchone()[0],
                 "reported_tokens": self.db.execute(
                     "SELECT COALESCE(SUM(tokens),0) FROM sessions"

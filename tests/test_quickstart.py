@@ -65,7 +65,7 @@ class QuickStartTest(unittest.TestCase):
         self.assertEqual(finished["status"], "review")
 
         decided = self.flux("decide", "M-397001", "accept", "--reason", "Reviewed diff and tests")
-        self.assertEqual(decided["status"], "accepted")
+        self.assertEqual(decided["status"], "done")
 
         status = self.flux("status")
         self.assertEqual(status["metrics"]["accepted"], 1)
@@ -121,7 +121,7 @@ class QuickStartTest(unittest.TestCase):
         )
         self.flux("finish", session, "--evidence", "evidence")
         decided = self.flux("accept", "M-397003", "--reason", "looks right")
-        self.assertEqual(decided["status"], "accepted")
+        self.assertEqual(decided["status"], "done")
 
 
 if __name__ == "__main__":

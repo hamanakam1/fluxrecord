@@ -113,30 +113,28 @@ INBOX → READY → IN_PROGRESS → BLOCKED? → REVIEW → ACCEPTED → DONE
 
 | Station | Entry Criteria | Exit Criteria | Gate |
 |---------|---------------|---------------|------|
-| **INBOX** | Ticket created | Triaged by owner | — |
-| **READY** | `scope` defined, `token_budget` set, dependencies met | `owner` assigned | — |
-| **IN_PROGRESS** | `start()` called, lease acquired | `checkpoint()` with evidence or `fail()` | Lease expiry auto-blocks |
-| **BLOCKED** | Lease expired, budget exhausted, or `fail()` called | `decide(retry)` or reconciliation | Lease renewal |
-| **REVIEW** | `finish()` called with evidence | `decide(accept)` or `decide(retry)` | Human/operator gate |
-| **ACCEPTED** | `decide(accept)` | Auto-transition to DONE | — |
-| **DONE** | Immutable | — | — |
+| **ready** | Ticket created, `scope` defined, `token_budget` set, dependencies met | `owner` assigned | — |
+| **in_progress** | `start()` called, lease acquired | `checkpoint()` with evidence or `fail()` | Lease expiry auto-blocks |
+| **blocked** | Lease expired, budget exhausted, or `fail()` called | `decide(retry)` or reconciliation | Lease renewal |
+| **review** | `finish()` called with evidence | `decide(accept)` or `decide(retry)` | Human/operator gate |
+| **accepted** | `decide(accept)` | Auto-transition to `done` | — |
+| **done** | Immutable, shipped | — | — |
+| **cancelled** | Operator cancelled the ticket | — | — |
 
 ---
 
 ## Status Values
 
 The ledger stores the status in lowercase, as the table below names them.
-A ticket is created `ready` — the ledger has no separate triage station,
-so `INBOX` is a station of the standard rather than a state the ledger
-holds. Acceptance is stored as `accepted` and the automatic move to `DONE`
-is recorded as a `task.done` event, so the gate and the transition are
-both visible.
+A ticket is created `ready`: the ledger has no triage station, and a
+station nothing can enter is decoration. Acceptance is the moment of the
+decision rather than a state the ledger holds, so the stored status after
+`decide(accept)` is `done`.
 
 | Status | Meaning | Next Valid Transitions |
 |--------|---------|------------------------|
-| `inbox` | Created, not triaged | → `ready` |
-| `ready` | Triaged, ready for work | → `in_progress` |
-| `in_progress` | Active lease, work happening | → `blocked`, `review`, `finished` |
+| `ready` | Ready for work | → `in_progress` |
+| `in_progress` | Active lease, work happening | → `blocked`, `review` |
 | `blocked` | Lease expired, budget exhausted, or failed | → `in_progress` (retry), `cancelled` |
 | `review` | Work finished, awaiting acceptance | → `accepted`, `in_progress` (retry) |
 | `accepted` | Accepted by operator | → `done` |
@@ -204,12 +202,17 @@ finish() → status=review
     ↓
 operator reviews evidence
     ↓
-decide(accept) → status=accepted → DONE
-decide(retry)  → status=ready    → IN_PROGRESS (new session)
+decide(accept) → status=done      → DONE
+decide(retry)  → status=ready     → IN_PROGRESS (new session)
 decide(cancel) → status=cancelled
 ```
 
 **Never** bypass the acceptance gate. `finish()` only creates `review`; only `decide(accept)` creates `done`.
+
+`accepted` is the moment of the decision, not a state the ledger holds:
+the gate opens, the work is accepted, and the ticket is stored as `done`.
+Both the decision and the transition are recorded in the event log, as
+`operator.accept` and `task.done`.
 
 ---
 
@@ -220,32 +223,53 @@ decide(cancel) → status=cancelled
 flux task-add M-397001 --objective "..." --acceptance "..." --scope repo/api --scope repo/auth --budget 8000
 flux start M-397001 --owner terminal-1 --lease 900
 flux checkpoint <sid> --summary "..." --evidence "..." --next "..." --tokens 1200
+flux renew <sid> --lease 900
+flux reconcile
 flux fail <sid> --category tool --summary "Compiler missing"
 flux finish <sid> --evidence "Reviewable diff abc123 and test output"
 flux decide M-397001 accept --reason "Reviewed diff and acceptance evidence"
+flux accept M-397001 --reason "..."
+flux retry M-397001 --reason "..."
+flux cancel M-397001 --reason "..."
 
 # Context & packets
 flux context-add M-397001 --file ./README.md --source "repo readme" --priority 10
 flux pack M-397001 --max-bytes 12000 --packet-only
 
 # Routing & profiles
-flux profile-add local-coder --kind code --context-limit 16000 --cost zero_incremental
+flux profile-add local-coder --kind code --context-limit 16000 --cost zero_incremental --requires git
 flux route M-397001 --required-context 8000
+
+# Reading the ledger
+flux status
+flux list --status ready --compact
+flux show M-397001
+flux sessions --active
+flux events --after 0 --type task.created
 
 # GitHub sync
 flux github-poll --repo owner/repo --sync-db ~/.flux/github.sqlite
+flux github-status --repo owner/repo
 flux github-publish --repo owner/repo --issue 123 --key summary --body "..."
 flux github-reconcile --repo owner/repo
+flux github-intake --repo owner/repo
 flux github-cycle --config cycle.json
 
 # Dashboard preview (local-only)
 flux dashboard-preview --url http://127.0.0.1:8080 --status planned --offset 0
+flux dashboard-intake --url http://127.0.0.1:8080
 
-# Project files and the wordmark
+# Project files, adapters and the wordmark
 flux init --project .fluxrecord
 flux export --project .fluxrecord
+flux import --file tickets.csv
 flux tools --history
+flux doctor --project .fluxrecord
+flux token issue --subject terminal-1 --scope read
+flux token verify <token>
+flux token introspect <token>
 flux art --style large --color
+flux version
 ```
 
 ---

@@ -144,7 +144,7 @@ fi
         self.assertEqual(checkpointed["tokens"], 10)
         self.assertEqual(self.json_out("finish", session, "--evidence", "e")["status"], "review")
         self.assertEqual(
-            self.json_out("decide", "M-1", "accept", "--reason", "reviewed")["status"], "accepted"
+            self.json_out("decide", "M-1", "accept", "--reason", "reviewed")["status"], "done"
         )
 
     def test_show_reports_one_ticket(self):
