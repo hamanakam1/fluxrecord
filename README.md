@@ -285,6 +285,12 @@ flux decide M-397001 accept --reason "Reviewed diff and tests"
 python3 -m unittest discover -s tests -v
 ```
 
+The suite covers the ledger, the adapters and the documented interface, and
+includes property-based tests for the rules that must hold for any input:
+cumulative tokens never decrease, the budget is enforced, three identical
+checkpoints are a failure, and the context packet never exceeds its byte
+budget.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
