@@ -39,6 +39,8 @@ class DoctorTest(unittest.TestCase):
         self.temp.cleanup()
 
     def test_a_fresh_ledger_is_reported(self):
+        with Ledger(self.db):
+            pass
         report = diagnose(self.db, self.project, self.sync_db)
         self.assertTrue(report["ledger"]["readable"])
         self.assertEqual(report["ledger"]["task_count"], 0)
@@ -114,11 +116,15 @@ class DoctorTest(unittest.TestCase):
         self.assertTrue(any("blocked" in note for note in report["notes"]))
 
     def test_the_chain_state_is_reported(self):
+        with Ledger(self.db):
+            pass
         report = diagnose(self.db, self.project, self.sync_db)
         self.assertFalse(report["ledger"]["chain"]["signed"])
         self.assertTrue(any("not signed" in note for note in report["notes"]))
 
     def test_a_signed_ledger_is_reported_as_signed(self):
+        with Ledger(self.db):
+            pass
         with mock.patch.dict(os.environ, {"FLUX_EVENT_KEY": "a-chain-key"}):
             report = diagnose(self.db, self.project, self.sync_db)
         self.assertTrue(report["ledger"]["chain"]["signed"])
