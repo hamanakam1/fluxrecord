@@ -27,6 +27,16 @@ def parser() -> argparse.ArgumentParser:
     exp = sub.add_parser("export", help="write tickets to the project directory")
     exp.add_argument("--project", default=".fluxrecord")
 
+    imp = sub.add_parser("import", help="import a CSV backlog into the ledger")
+    imp.add_argument("--file", required=True)
+    imp.add_argument("--kind", default="code")
+    imp.add_argument("--dry-run", action="store_true")
+    imp.add_argument(
+        "--reassign",
+        action="store_true",
+        help="give a fresh id to rows whose id is already used by another ticket",
+    )
+
     art = sub.add_parser("art", help="print the fluxrecord wordmark")
     art.add_argument(
         "--style", choices=["large", "small", "mini", "minimal", "ascii"], default="large"
@@ -225,6 +235,23 @@ def main() -> None:
             ledger = Ledger(a.db)
             try:
                 print(json.dumps(export(ledger, a.project), indent=2, ensure_ascii=False))
+            finally:
+                ledger.close()
+            return
+
+        if a.command == "import":
+            from .core import Ledger
+            from .importer import import_csv
+
+            ledger = Ledger(a.db)
+            try:
+                print(
+                    json.dumps(
+                        import_csv(ledger, a.file, a.kind, a.dry_run, a.reassign),
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                )
             finally:
                 ledger.close()
             return

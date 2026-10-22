@@ -85,6 +85,7 @@ INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
 | `flux decide <id> accept\|retry\|cancel --reason "..."` | Operator decision |
 | `flux init [--project .fluxrecord]` | Create the ledger and the project layout |
 | `flux export [--project .fluxrecord]` | Write tickets and evidence as files |
+| `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
 | `flux status` | Ledger state, metrics and failure history |
 | `flux events [--after N]` | The event log, as JSON |
 | `flux pack <id> [--max-bytes N] [--packet-only]` | Bounded context packet for a ticket |
@@ -173,6 +174,25 @@ The core ledger is stdlib-only: no network, no shell, no telemetry. The
 adapters around it each declare their own boundary — the dashboard reads
 loopback only, the GitHub sync talks to the `gh` CLI only, and the tooling
 inventory never executes anything.
+
+---
+
+## Bringing a Backlog With You
+
+`flux import` maps a CSV backlog onto the ticket model: the file column
+becomes the scope, so conflicts are detectable; the epic and category become
+tags; P0..P3 become priorities 1..3; and the id doubles as a seed key, so
+importing twice changes nothing.
+
+```bash
+flux import --file tickets.csv --dry-run   # see what would happen
+flux import --file tickets.csv             # import it
+```
+
+The repository's own `tickets.csv` is the worked example — 98 rows that
+reuse 31 ids. A reused id is reported as a conflict rather than silently
+dropped; `--reassign` gives those rows a fresh sequential id instead and
+reports the old and new id for each.
 
 ---
 
