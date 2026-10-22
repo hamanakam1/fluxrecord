@@ -65,6 +65,32 @@ class ListTest(unittest.TestCase):
         self.assertEqual(len(self.ledger.list_tasks(limit=1)), 1)
 
 
+class ProfileTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "ledger.sqlite"
+        self.ledger = Ledger(self.path)
+
+    def tearDown(self):
+        self.ledger.close()
+        self.temp.cleanup()
+
+    def test_declared_profiles_are_visible(self):
+        self.ledger.profile("local-coder", ["code"], 16000, "zero_incremental")
+        profiles = self.ledger.status()["profiles"]
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]["id"], "local-coder")
+        self.assertEqual(profiles[0]["kinds"], ["code"])
+        self.assertEqual(profiles[0]["cost"], "zero_incremental")
+
+    def test_a_profile_is_a_declaration_not_a_verification(self):
+        self.ledger.add_task("M-1", "Objective", "Acceptance", scope=["repo/x"])
+        self.ledger.profile("local-coder", ["code"], 16000, "zero_incremental")
+        route = self.ledger.route("M-1")
+        self.assertFalse(route["execution_authorized"])
+        self.assertEqual(route["options"][0]["provenance"], "operator declaration")
+
+
 class ShowTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

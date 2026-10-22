@@ -705,6 +705,16 @@ class Ledger:
                     "SELECT fingerprint,category,summary,COUNT(*) AS occurrences FROM failures GROUP BY fingerprint,category,summary ORDER BY occurrences DESC"
                 )
             ],
+            "profiles": [
+                {
+                    "id": row["id"],
+                    "kinds": json.loads(row["kinds"]),
+                    "context_limit": row["context_limit"],
+                    "cost": row["cost"],
+                    "verified_until": row["verified_until"],
+                }
+                for row in self.db.execute("SELECT * FROM profiles ORDER BY id")
+            ],
             "metrics": {
                 "accepted": self.db.execute(
                     "SELECT COUNT(*) FROM tasks WHERE status='accepted'"
