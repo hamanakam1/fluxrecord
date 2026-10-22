@@ -4,6 +4,27 @@ All notable changes to fluxrecord are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **The long-term plan.** `PLAN.md` says how fluxrecord should be built: six
+  phases with exit criteria that can be checked, the workstreams that run in
+  parallel, the quality gates, the threat model, the risks, the open
+  questions, and — deliberately — the list of things this project will not
+  build.
+- **Generated screenshots.** `docs/screenshots/` holds ten terminal captures
+  of the real CLI, and `scripts/capture_screenshots.py` regenerates them by
+  running the CLI against a throwaway ledger and rendering the output
+  through a headless browser. The images are never hand-edited, and the
+  script redacts the machine's home directory and any temporary build path
+  before it renders anything.
+
+### Changed
+
+- The README now shows the ticket lifecycle and a gallery of the commands,
+  and points at `PLAN.md` for the long-term view.
+
 ## [0.2.0] — 2026-10-22
 
 The ledger, the CLI and the specification were brought into agreement, and

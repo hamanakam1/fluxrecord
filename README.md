@@ -9,6 +9,12 @@
   Less repeated context. More accepted work. Visible failures.
 ```
 
+[![CI](https://github.com/hamanakam1/fluxrecord/actions/workflows/ci.yml/badge.svg)](https://github.com/hamanakam1/fluxrecord/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![Runtime dependencies: 0](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)](pyproject.toml)
+[![Releases](https://img.shields.io/github/v/release/hamanakam1/fluxrecord)](https://github.com/hamanakam1/fluxrecord/releases)
+
 ---
 
 fluxrecord is a **ticket standard** for local-first, evidence-driven coordination — built for people working across AI coding agents, CLIs, and terminal sessions.
@@ -49,6 +55,10 @@ flux decide M-397001 accept --reason "Reviewed diff and tests"
 # Write the tickets and their evidence to the project directory
 flux export --project .fluxrecord
 ```
+
+### The whole loop, in one ticket
+
+![flux task-add, flux start, flux checkpoint, flux finish and flux decide accept](docs/screenshots/lifecycle.png)
 
 ---
 
@@ -342,7 +352,28 @@ flux decide M-397001 accept --reason "Reviewed diff and tests"
 
 ---
 
+## Screenshots
+
+Every image here is the real output of the real CLI, captured against a
+throwaway ledger and rendered by
+[`scripts/capture_screenshots.py`](scripts/capture_screenshots.py). They are
+generated, never hand-edited: if the output changes, the images are
+regenerated in the same commit.
+
+| | |
+|:--|:--|
+| <img src="docs/screenshots/init.png" width="100%" alt="flux init — the ledger and the project layout"> | <img src="docs/screenshots/failure.png" width="100%" alt="flux fail, then flux list --status blocked — a failure is a first-class record"> |
+| <img src="docs/screenshots/show.png" width="100%" alt="flux show — one ticket with its sessions, checkpoints, events and failures"> | <img src="docs/screenshots/pack.png" width="100%" alt="flux pack — the bounded context packet, sized exactly in bytes"> |
+| <img src="docs/screenshots/list.png" width="100%" alt="flux list — tickets with filters"> | <img src="docs/screenshots/status.png" width="100%" alt="flux status — the ledger, its sessions, its failures and its metrics"> |
+| <img src="docs/screenshots/tools.png" width="100%" alt="flux tools — the local executable inventory; nothing is executed"> | <img src="docs/screenshots/export.png" width="100%" alt="flux export — the ledger projected onto files"> |
+
+---
+
 ## Roadmap
+
+The short version is here; the long-term plan — phases, exit criteria, the
+risks, and what this project will deliberately not build — is in
+**[PLAN.md](PLAN.md)**.
 
 - [x] Core ledger (SQLite + WAL, transactions, additive migrations)
 - [x] JSON-first CLI (`flux`)
@@ -351,6 +382,11 @@ flux decide M-397001 accept --reason "Reviewed diff and tests"
 - [x] Ticket file storage (`.fluxrecord/` layout)
 - [x] Local tooling inventory
 - [x] JWT auth routes (login, refresh, revoke, introspect)
+- [ ] Settle the status vocabulary (the spec and the code must agree)
+- [ ] Measure the context saving (packet hashes, deltas, a budget policy)
+- [ ] Coordination: lease handoff, adoption, `flux watch`
+- [ ] A written threat model, and an event log that detects an edit
+- [ ] Freeze the wire format, and publish a conformance suite
 - [ ] WebSocket real-time updates
 - [ ] Plugin system for custom tabs
 - [ ] Kubernetes manifests + Helm chart

@@ -45,11 +45,27 @@ mypy fluxrecord/
 # Lint and format
 ruff check fluxrecord/
 ruff format --check fluxrecord/
+
+# Regenerate the README screenshots (needs Chrome)
+python3 scripts/capture_screenshots.py
 ```
 
 CI runs all four on Python 3.11 and 3.12. The suite covers the ledger, the
 adapters, the authentication module, the documented interface, and the rules
 that must hold for any input.
+
+### Screenshots
+
+The images in `docs/screenshots/` are **generated**, not drawn.
+`scripts/capture_screenshots.py` runs the real CLI against a throwaway
+ledger, renders the output through a headless browser, and writes the PNGs.
+Regenerate them in the same commit as any change to what the CLI prints, so
+the documentation never describes a build that does not exist.
+
+The script redacts the machine's home directory and any temporary build
+path before rendering, so a screenshot never carries a real local path. Keep
+it that way: use synthetic ticket data, and keep private deployment names
+and real ticket data out of the rendered output.
 
 ---
 
