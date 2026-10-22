@@ -144,7 +144,7 @@ def run_pty(argv: list[str], cwd: Path, env: dict[str, str]) -> tuple[str, str]:
 class Flux:
     """A throwaway ledger driven through the real command line."""
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(self, workspace: Path, env: dict[str, str] | None = None) -> None:
         self.workspace = workspace
         # A relative ledger path keeps the machine's temporary directory out
         # of the screenshots, which are meant to look like real output.
@@ -161,10 +161,15 @@ class Flux:
             "PYTHONPATH": str(REPO),
         }
         self.env.pop("NO_COLOR", None)
+        if env:
+            self.env.update(env)
 
-    def __call__(self, *args: str) -> tuple[str, str]:
+    def __call__(self, *args: str, env: dict[str, str] | None = None) -> tuple[str, str]:
         argv = [sys.executable, "-m", "fluxrecord", *args]
-        return run_pty(argv, self.workspace, self.env)
+        environment = dict(self.env)
+        if env:
+            environment.update(env)
+        return run_pty(argv, self.workspace, environment)
 
     def json(self, *args: str) -> dict:
         out, err = self(*args)
@@ -651,6 +656,102 @@ def scene_export(flux: Flux) -> tuple[str, str, str]:
     )
 
 
+def scene_benchmark(flux: Flux) -> tuple[str, str, str]:
+    """The first promise, measured rather than claimed.
+
+    The ticket names a file that exists, so the comparison is against real
+    bytes rather than a flattering estimate.
+    """
+    flux(
+        "task-add",
+        "M-397002",
+        "--objective",
+        "Implement JWT-based authentication for API endpoints",
+        "--acceptance",
+        "Tokens issued, refreshed, revoked and introspected",
+        "--scope",
+        "fluxrecord/core.py",
+        "--budget",
+        "8000",
+    )
+    out, _ = flux("benchmark", "M-397002", "--root", str(REPO))
+    return (
+        "benchmark",
+        "fluxrecord — flux benchmark",
+        prompt_line("fluxrecord", "flux benchmark M-397002 --root .")
+        + "\n"
+        + render_output(out.rstrip("\n")),
+    )
+
+
+def scene_doctor(flux: Flux) -> tuple[str, str, str]:
+    """One report about the whole system."""
+    out, _ = flux(
+        "doctor",
+        "--project",
+        ".fluxrecord",
+        "--sync-db",
+        str(flux.workspace / "github.sqlite"),
+    )
+    return (
+        "doctor",
+        "fluxrecord — flux doctor",
+        prompt_line("fluxrecord", "flux doctor --project .fluxrecord")
+        + "\n"
+        + render_output(out.rstrip("\n")),
+    )
+
+
+def scene_watch(flux: Flux) -> tuple[str, str, str]:
+    """Real-time, with no server and no socket."""
+    out, _ = flux("watch", "--once")
+    return (
+        "watch",
+        "fluxrecord — flux watch --once",
+        prompt_line("fluxrecord", "flux watch --once") + "\n" + render_output(out.rstrip("\n")),
+    )
+
+
+def scene_delta(flux: Flux) -> tuple[str, str, str]:
+    """What changed, rather than the whole packet again."""
+    # A ticket that is still workable: the rich ledger has already
+    # accepted M-397001, and a finished ticket cannot be started again.
+    task = "M-397203"
+    out, _ = flux("pack", task)
+    digest = json.loads(out)["packet_hash"]
+    session = json.loads(flux("start", task, "--owner", "terminal-3")[0])["session_id"]
+    flux(
+        "checkpoint",
+        session,
+        "--summary",
+        "Wrote the token route",
+        "--evidence",
+        "diff 4f2a91c",
+        "--next",
+        "Rotate the refresh token",
+        "--tokens",
+        "1200",
+    )
+    out, _ = flux("pack", task, "--since", digest, "--delta-only")
+    return (
+        "delta",
+        "fluxrecord — flux pack --since",
+        prompt_line("fluxrecord", "flux pack M-397203 --since <hash> --delta-only")
+        + "\n"
+        + render_output(out.rstrip("\n")),
+    )
+
+
+def scene_verify(flux: Flux) -> tuple[str, str, str]:
+    """The event log, and the proof that it was not rewritten."""
+    out, _ = flux("verify")
+    return (
+        "verify",
+        "fluxrecord — flux verify",
+        prompt_line("fluxrecord", "flux verify") + "\n" + render_output(out.rstrip("\n")),
+    )
+
+
 def seed(flux: Flux) -> None:
     """Build the ledger the scenes read from."""
     flux(
@@ -785,6 +886,45 @@ def build_small(workdir: Path) -> Flux:
     return flux
 
 
+def build_signed(workdir: Path) -> Flux:
+    """A ledger whose event log is chained, so `flux verify` has something
+    to verify."""
+    flux = Flux(workdir / "signed", env={"FLUX_EVENT_KEY": "a-signing-key-for-the-screenshot"})
+    flux.workspace.mkdir(parents=True, exist_ok=True)
+    flux("init", "--project", ".fluxrecord")
+    flux(
+        "task-add",
+        "M-397001",
+        "--objective",
+        "Implement JWT-based authentication",
+        "--acceptance",
+        "Tokens issued, refreshed, revoked and introspected",
+        "--scope",
+        "repo/auth",
+        "--budget",
+        "8000",
+        "--tag",
+        "security",
+    )
+    out, _ = flux("start", "M-397001", "--owner", "terminal-1")
+    session = json.loads(out)["session_id"]
+    flux(
+        "checkpoint",
+        session,
+        "--summary",
+        "Token issuance and refresh rotation",
+        "--evidence",
+        "diff 4f2a91c; POST /api/auth/login returns a pair",
+        "--next",
+        "Add revocation and introspection",
+        "--tokens",
+        "1200",
+    )
+    flux("finish", session, "--evidence", "diff 4f2a91c; 41 tests pass")
+    flux("decide", "M-397001", "accept", "--reason", "Reviewed the diff and the evidence")
+    return flux
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=str(REPO / "docs" / "screenshots"))
@@ -799,6 +939,7 @@ def main() -> None:
         rich = build_rich(workdir)
         small = build_small(workdir)
         fresh = build_fresh(workdir)
+        signed = build_signed(workdir)
 
         scenes = [
             scene_hero(rich),
@@ -808,6 +949,11 @@ def main() -> None:
             scene_list(rich),
             scene_show(rich),
             scene_pack(rich),
+            scene_delta(rich),
+            scene_benchmark(rich),
+            scene_doctor(rich),
+            scene_watch(rich),
+            scene_verify(signed),
             scene_tools(rich),
             scene_export(rich),
             scene_status(small),

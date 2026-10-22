@@ -98,6 +98,7 @@ creates a review, and only an operator decision creates a done.
 | `flux adopt <sid> --owner <owner> --reason "..."` | Take over a lease whose owner has gone away |
 | `flux watch [--after N] [--once] [--json]` | Print new events as they land |
 | `flux verify [--signed]` | Check that the event log has not been edited |
+| `flux compact [--keep 100]` | Fold the oldest events into a summary |
 | `flux reconcile` | Expire leases that have run out |
 | `flux fail <sid> --category tool --summary "..."` | Record failure |
 | `flux finish <sid> --evidence "..."` | Request review |
@@ -427,6 +428,11 @@ flux verify --signed           # fails when the ledger is not signed
 The chain is off by default: a ledger nobody signs is still a ledger, and
 `flux verify` says so rather than pretending to have checked something.
 
+The event log is the ledger's memory, and memory grows. `flux compact`
+folds the oldest events into a summary and prunes them, and the chain
+still verifies afterwards: the digest of the last pruned event is kept as
+the base the remaining events chain onto.
+
 A chain is a prefix, so the head of the chain is recorded beside the log
 and compared on every check. That catches a log truncated at the end as
 well as one edited in the middle. What it proves is that the log has not
@@ -641,12 +647,12 @@ regenerated in the same commit.
 
 | | |
 |:--|:--|
-| <img src="docs/screenshots/benchmark.png" width="100%" alt="flux benchmark — the packet a worker is handed, against the bytes it would spend re-reading the files the ticket names"> | <img src="docs/screenshots/doctor.png" width="100%" alt="flux doctor — one report about the ledger, the project and every adapter"> |
-| <img src="docs/screenshots/delta.png" width="100%" alt="flux pack --since --delta-only — what changed, rather than the whole packet again"> | <img src="docs/screenshots/watch.png" width="100%" alt="flux watch — new events as they land, with no server and no socket"> |
-| <img src="docs/screenshots/verify.png" width="100%" alt="flux verify — the event log, and the proof that it was not rewritten"> | <img src="docs/screenshots/failure.png" width="100%" alt="flux fail, then flux list --status blocked — a failure is a first-class record"> |
-| <img src="docs/screenshots/pack.png" width="100%" alt="flux pack — the bounded context packet, sized exactly in bytes"> | <img src="docs/screenshots/show.png" width="100%" alt="flux show — one ticket with its sessions, checkpoints, events and failures"> |
+| <img src="docs/screenshots/watch.png" width="100%" alt="flux watch — new events as they land, with no server and no socket"> | <img src="docs/screenshots/benchmark.png" width="100%" alt="flux benchmark — the packet a worker is handed, against the bytes it would spend re-reading the files the ticket names"> |
+| <img src="docs/screenshots/delta.png" width="100%" alt="flux pack --since --delta-only — what changed, rather than the whole packet again"> | <img src="docs/screenshots/verify.png" width="100%" alt="flux verify — the event log, and the proof that it was not rewritten"> |
+| <img src="docs/screenshots/failure.png" width="100%" alt="flux fail, then flux list --status blocked — a failure is a first-class record"> | <img src="docs/screenshots/pack.png" width="100%" alt="flux pack — the bounded context packet, sized exactly in bytes"> |
+| <img src="docs/screenshots/doctor.png" width="100%" alt="flux doctor — one report about the ledger, the project and every adapter"> | <img src="docs/screenshots/status.png" width="100%" alt="flux status — the ledger, its sessions, its failures and its metrics"> |
+| <img src="docs/screenshots/list.png" width="100%" alt="flux list — tickets with filters"> | <img src="docs/screenshots/show.png" width="100%" alt="flux show — one ticket with its sessions, checkpoints, events and failures"> |
 | <img src="docs/screenshots/init.png" width="100%" alt="flux init — the ledger and the project layout"> | <img src="docs/screenshots/export.png" width="100%" alt="flux export — the ledger projected onto files"> |
-| <img src="docs/screenshots/list.png" width="100%" alt="flux list — tickets with filters"> | <img src="docs/screenshots/status.png" width="100%" alt="flux status — the ledger, its sessions, its failures and its metrics"> |
 
 ---
 

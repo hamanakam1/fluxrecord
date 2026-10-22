@@ -64,6 +64,11 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   themselves. This implementation passes it, the suite rejects an
   implementation that answers with the wrong shape, and an implementation
   that answers nothing is a failure rather than a traceback.
+- **The screenshots cover the whole surface.** The generator now captures
+  the measurement (`flux benchmark`), the delta (`flux pack --since`), the
+  diagnosis (`flux doctor`), the live view (`flux watch`) and the tamper
+  check (`flux verify`), and the README's gallery leads with the
+  measurement — the promise, measured rather than claimed.
 - **The event chain is reachable, and tested.** Every ledger the CLI opens
   is now chained when `FLUX_EVENT_KEY` is set, so the chain is no longer a
   capability that exists only inside the library. `tests/test_chain.py`
