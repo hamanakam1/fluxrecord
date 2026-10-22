@@ -17,8 +17,8 @@ are left alone and reported as unchanged.
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any
 
 __all__ = ["import_csv", "read_rows"]
