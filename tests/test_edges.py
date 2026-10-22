@@ -1,18 +1,16 @@
 """The error paths: what a user reaches by getting something wrong."""
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from fluxrecord import benchmark, wire
 from fluxrecord.core import Ledger
 from fluxrecord.doctor import diagnose
 from fluxrecord.github_cycle import cycle
 from fluxrecord.importer import import_csv
-from fluxrecord.intake import actionable, intake
+from fluxrecord.intake import actionable
 from fluxrecord.watch import format_event, watch, watch_json
 
 
