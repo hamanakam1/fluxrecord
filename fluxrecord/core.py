@@ -91,6 +91,10 @@ _TASK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 #: new category, so it is refused rather than recorded.
 FAILURE_CATEGORIES = ("lease_expired", "budget", "tool", "dependency", "no_progress")
 
+#: The kinds of work a ticket can be. The specification names them, so a
+#: kind outside the list is refused rather than recorded.
+TASK_KINDS = ("code", "fix", "closure", "planning", "product")
+
 #: The context budget a ticket kind gets when nobody says otherwise. The
 #: byte budget is exact; these are the defaults the specification names.
 BUDGET_POLICY: dict[str, int] = {
@@ -460,6 +464,8 @@ class Ledger:
             raise ValueError(
                 "id must be a plain identifier such as M-397001; it cannot contain path separators"
             )
+        if kind not in TASK_KINDS:
+            raise ValueError(f"kind must be one of {', '.join(TASK_KINDS)}")
         positive(token_budget, "token_budget")
         if type(priority) is not int or priority not in (1, 2, 3):
             raise ValueError("priority must be 1, 2, or 3")

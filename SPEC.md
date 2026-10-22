@@ -50,7 +50,7 @@ id: "M-397001"
 title: "Implement JWT-based authentication for API endpoints"
 status: "IN_PROGRESS"  # INBOX | READY | IN_PROGRESS | BLOCKED | REVIEW | ACCEPTED | CANCELLED
 priority: 2  # 1=P1-Now | 2=P2-Next | 3=P3-Later
-kind: "code"  # code | fix | closure | planning | product
+kind: "code"  # code | fix | closure | planning | product (refused otherwise)
 scope: ["repo/api", "repo/auth"]  # resource keys for conflict detection
 token_budget: 8000
 tags: ["security", "auth", "api"]
