@@ -53,6 +53,8 @@ def _target(url: str, status: str, offset: int) -> str:
     host = (parts.hostname or "").lower()
     if host not in LOOPBACK_HOSTS:
         raise ValueError(f"dashboard url must be local; refusing host {host!r}")
+    if parts.username or parts.password:
+        raise ValueError("dashboard url must not carry credentials")
     if not _STATUS_TOKEN.fullmatch(status):
         raise ValueError("status filter must be a lowercase token")
     if offset < 0:

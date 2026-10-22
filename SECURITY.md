@@ -36,11 +36,25 @@
 - No token in code
 - 30-second timeout
 - 16 MiB response limit
+- Idempotency keys are plain tokens, so a key cannot break the marker
+
+### Authentication
+- HS256 only, and the algorithm is read from the header, never trusted from it
+- Signatures compared with `hmac.compare_digest`
+- `exp`, `nbf`, `iss` and `aud` checked on every verification
+- Scopes are granted by the credential verifier, never by the request
+- Refresh tokens rotate and are spent once
+- Every token carries a `jti`, so it can be revoked
+
+### Ticket Files
+- Ticket ids are plain identifiers, so an id cannot walk out of the project
+- Every exported path is resolved and checked against its directory
 
 ### Secrets
 - Never in repo
 - Injected via env/CSI at deploy
 - `FLUX_DB`, `FLUX_GITHUB_DB` env vars
+- `NO_COLOR` disables ANSI colour in the wordmark
 
 ---
 

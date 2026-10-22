@@ -36,6 +36,8 @@ __all__ = [
 
 TIMEOUT_SECONDS = 30
 MAX_KEY_LENGTH = 100
+#: A response larger than this is refused rather than held in memory.
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 #: The action each observation kind implies.
 ACTIONS: dict[str, str] = {
@@ -109,6 +111,8 @@ def _gh_json(args: list[str]) -> Any:
         detail = result.stderr.strip().splitlines()
         reason = detail[0] if detail else f"exit {result.returncode}"
         raise OSError(f"gh {args[0]} failed: {reason[:200]}")
+    if len(result.stdout) > MAX_RESPONSE_BYTES:
+        raise OSError(f"gh response exceeded {MAX_RESPONSE_BYTES} bytes; refused")
     text = result.stdout.strip()
     if not text:
         return None

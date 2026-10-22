@@ -133,6 +133,10 @@ class DashboardTargetTest(unittest.TestCase):
         target = dashboard._target("http://127.0.0.1:8080", "blocked", 12)
         self.assertEqual(target, "http://127.0.0.1:8080/api/tickets?status=blocked&offset=12")
 
+    def test_a_url_with_credentials_is_refused(self):
+        with self.assertRaises(ValueError):
+            dashboard.preview("http://user:pass@127.0.0.1:8080", "planned", 0)
+
     def test_status_filter_cannot_inject_query_parameters(self):
         with self.assertRaises(ValueError):
             dashboard._target("http://localhost:8080", "planned&offset=999", 0)

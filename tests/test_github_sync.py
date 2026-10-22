@@ -141,6 +141,17 @@ class GitHubSyncTest(unittest.TestCase):
         self.assertEqual(result["confirmed"], ["summary"])
         self.assertEqual(self.sync.status("owner/repo")["outbox"], {"confirmed": 1})
 
+    def test_an_oversized_response_is_refused(self):
+        from fluxrecord import github_sync
+
+        original = github_sync.MAX_RESPONSE_BYTES
+        github_sync.MAX_RESPONSE_BYTES = 10
+        try:
+            with self.assertRaises(OSError):
+                github_sync._gh_json(["api", "repos/owner/repo/issues"])
+        finally:
+            github_sync.MAX_RESPONSE_BYTES = original
+
     def test_marker_shape_matches_the_spec(self):
         marker = marker_for("summary", "a" * 64)
         self.assertTrue(marker.startswith("<!-- taskrivet:summary:"))

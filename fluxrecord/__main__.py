@@ -60,18 +60,33 @@ def parser() -> argparse.ArgumentParser:
     for command in ("github-poll", "github-status"):
         g = sub.add_parser(command)
         g.add_argument("--repo", required=True)
-        g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+        g.add_argument(
+            "--sync-db",
+            default=os.environ.get(
+                "FLUX_GITHUB_DB", str(Path.home() / ".fluxrecord" / "github.sqlite")
+            ),
+        )
 
     g = sub.add_parser("github-publish", help="queue and publish an idempotent comment")
     g.add_argument("--repo", required=True)
     g.add_argument("--issue", type=int, required=True)
     g.add_argument("--key", required=True, help="idempotency key (max 100 characters)")
     g.add_argument("--body", required=True)
-    g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+    g.add_argument(
+        "--sync-db",
+        default=os.environ.get(
+            "FLUX_GITHUB_DB", str(Path.home() / ".fluxrecord" / "github.sqlite")
+        ),
+    )
 
     g = sub.add_parser("github-reconcile", help="confirm sent comments against the issue")
     g.add_argument("--repo", required=True)
-    g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+    g.add_argument(
+        "--sync-db",
+        default=os.environ.get(
+            "FLUX_GITHUB_DB", str(Path.home() / ".fluxrecord" / "github.sqlite")
+        ),
+    )
 
     g = sub.add_parser("github-cycle")
     g.add_argument("--config", required=True)

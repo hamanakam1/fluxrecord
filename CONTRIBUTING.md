@@ -39,15 +39,23 @@ python3 -m unittest discover -s tests -v
 # Run specific test
 python3 -m unittest tests.test_core.LedgerTest.test_concurrent_claim_has_one_winner -v
 
-# Type checking (when mypy config added)
-# mypy fluxrecord/
+# Type checking
+mypy fluxrecord/
+
+# Lint and format
+ruff check fluxrecord/
+ruff format --check fluxrecord/
 ```
+
+CI runs all four on Python 3.11 and 3.12. The suite covers the ledger, the
+adapters, the authentication module, the documented interface, and the rules
+that must hold for any input.
 
 ---
 
 ## Code Style
 
-- **Type hints** on all public functions (see `core.py`, `tools.py`, `dashboard.py`, `github_sync.py`)
+- **Type hints** on all public functions (see `core.py`, `tools.py`, `dashboard.py`, `github_sync.py`, `auth/`)
 - **No runtime dependencies** in core (stdlib only)
 - **No network** in core or read commands
 - **No telemetry** in core or read commands
@@ -66,3 +74,6 @@ python3 -m unittest tests.test_core.LedgerTest.test_concurrent_claim_has_one_win
 | Evidence hashes | Detects repeated evidence (stagnation) |
 | Acceptance gate | Separates execution from acceptance |
 | Failure fingerprints | Stable grouping of recurrences |
+| Additive migrations | Schema changes never rewrite history |
+| Seed keys | Seeding is idempotent, so an import can be repeated |
+| Wordmark as code | The mark is generated, so it never drifts between styles |
