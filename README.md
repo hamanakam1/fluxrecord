@@ -80,6 +80,8 @@ INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
 | `flux task-add <id> --objective "..." --acceptance "..." --scope repo/x` | Create ticket |
 | `flux start <id> --owner <name> --lease 900` | Start work (acquire lease) |
 | `flux checkpoint <sid> --summary "..." --evidence "..." --next "..." --tokens <n>` | Record progress |
+| `flux renew <sid> [--lease 900]` | Extend the lease on an active session |
+| `flux reconcile` | Expire leases that have run out |
 | `flux fail <sid> --category tool --summary "..."` | Record failure |
 | `flux finish <sid> --evidence "..."` | Request review |
 | `flux decide <id> accept\|retry\|cancel --reason "..."` | Operator decision |

@@ -263,23 +263,29 @@ class Ledger:
         )
         self.event("failure.recorded", task, session=session, category=category, fingerprint=digest)
 
-    def _expire(self) -> None:
+    def _expire(self) -> list[str]:
         rows = self.db.execute(
             "SELECT * FROM sessions WHERE status='active' AND lease_until<=?", (time.time(),)
         ).fetchall()
+        expired: list[str] = []
         for row in rows:
             self.db.execute("UPDATE sessions SET status='expired' WHERE id=?", (row["id"],))
             self.db.execute("UPDATE tasks SET status='blocked' WHERE id=?", (row["task_id"],))
+            self._touch(row["task_id"])
             self._failure(
                 row["task_id"],
                 row["id"],
                 "lease_expired",
                 "Ownership expired; reconcile the old worker before retrying.",
             )
+            expired.append(str(row["id"]))
+        return expired
 
-    def reconcile(self) -> None:
+    def reconcile(self) -> dict[str, Any]:
+        """Expire leases that have run out, and report what was expired."""
         with self.transaction():
-            self._expire()
+            expired = self._expire()
+        return {"expired": expired, "count": len(expired)}
 
     def start(self, task_id: str, owner: str, lease_seconds: int = 900) -> dict[str, Any]:
         required(owner, "owner")
@@ -387,6 +393,17 @@ class Ledger:
                 )
         return {"session_id": sid, "status": "blocked" if blocked else "active", "tokens": tokens}
 
+    def renew(self, sid: str, lease_seconds: int = 900) -> dict[str, Any]:
+        """Extend the lease of an active session."""
+        positive(lease_seconds, "lease_seconds")
+        with self.transaction():
+            session = self._session(sid)
+            until = time.time() + lease_seconds
+            self.db.execute("UPDATE sessions SET lease_until=? WHERE id=?", (until, sid))
+            self._touch(session["task_id"])
+            self.event("session.renewed", session["task_id"], session=sid, lease_until=until)
+        return {"session_id": sid, "task_id": session["task_id"], "lease_until": until}
+
     def fail(self, sid: str, category: str, summary: str) -> dict[str, str]:
         required(category, "category")
         required(summary, "summary")
@@ -432,6 +449,9 @@ class Ledger:
             self.db.execute("UPDATE tasks SET status=? WHERE id=?", (status, task_id))
             self._touch(task_id)
             self.event("operator." + decision, task_id, reason=reason)
+            if decision == "accept":
+                # Acceptance is the gate; DONE follows automatically.
+                self.event("task.done", task_id, reason=reason)
         return {"status": status}
 
     def add_context(

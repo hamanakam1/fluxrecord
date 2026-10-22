@@ -117,6 +117,12 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--tokens", type=int, required=True)
     c.add_argument("--lease", type=int, default=900)
 
+    rn = sub.add_parser("renew", help="extend the lease on an active session")
+    rn.add_argument("session")
+    rn.add_argument("--lease", type=int, default=900)
+
+    sub.add_parser("reconcile", help="expire leases that have run out")
+
     f = sub.add_parser("fail")
     f.add_argument("session")
     f.add_argument("--category", required=True)
@@ -321,6 +327,10 @@ def main() -> None:
             result = ledger.start(a.task, a.owner, a.lease)
         elif cmd == "checkpoint":
             result = ledger.checkpoint(a.session, a.summary, a.evidence, a.next, a.tokens, a.lease)
+        elif cmd == "renew":
+            result = ledger.renew(a.session, a.lease)
+        elif cmd == "reconcile":
+            result = ledger.reconcile()
         elif cmd == "fail":
             result = ledger.fail(a.session, a.category, a.summary)
         elif cmd == "finish":
