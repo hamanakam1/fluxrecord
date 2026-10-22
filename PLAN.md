@@ -572,10 +572,12 @@ planning.
    correctly. The specification already promised this; the code now keeps
    the promise.
 
-2. **Is `flux watch` better than WebSockets for real-time updates?**
-   *Recommendation:* yes, and it should replace the WebSocket item on the
-   roadmap. It needs no server, no port and no new boundary, and it works
-   over the file the reader already has open.
+2. ~~**Is `flux watch` better than WebSockets for real-time updates?**~~
+   **Settled: `flux watch` replaces the WebSocket item.** The event log
+   is already a table in the file the reader has open, so watching it
+   needs no socket, no port, no origin check and no new boundary — and it
+   delivers the same "the board changed" value. The WebSocket item is
+   gone from the roadmap rather than deferred.
 
 3. ~~**Should `auth` become a bounded local service, or stay a library?**~~
    **Settled: it stays a library.** ADR 0001 records the reasoning: a
