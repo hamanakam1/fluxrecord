@@ -224,6 +224,8 @@ flux task-add M-397001 --objective "..." --acceptance "..." --scope repo/api --s
 flux start M-397001 --owner terminal-1 --lease 900
 flux checkpoint <sid> --summary "..." --evidence "..." --next "..." --tokens 1200
 flux renew <sid> --lease 900
+flux handoff <sid> --to terminal-2 --reason "going home"
+flux adopt <sid> --owner terminal-2 --reason "the old worker is gone"
 flux reconcile
 flux fail <sid> --category tool --summary "Compiler missing"
 flux finish <sid> --evidence "Reviewable diff abc123 and test output"
@@ -248,6 +250,7 @@ flux list --status ready --compact
 flux show M-397001
 flux sessions --active
 flux events --after 0 --type task.created
+flux watch --after 0 --once
 
 # GitHub sync
 flux github-poll --repo owner/repo --sync-db ~/.flux/github.sqlite
@@ -300,6 +303,22 @@ A tokenizer is a plug-in, never a dependency. The core imports nothing to
 measure tokens; a caller registers one and passes it to the ledger. When
 one is registered, packets carry a `token_count`; when none is, the field
 is absent and the byte budget is the authority.
+
+## Coordination
+
+A scope is reserved by the ticket that holds it: `start()` refuses a
+ticket whose scope overlaps one that is `in_progress`, `blocked` or in
+`review`. Two workers cannot hold the same work.
+
+A lease changes hands deliberately, and the reason is recorded in the
+event log:
+
+    handoff(session, owner, reason)   the owner changes, the lease continues
+    adopt(session, owner, reason)     the owner changes, the lease extends
+
+Real-time updates need no server. The event log is a table in the same
+file the reader already has open, so `flux watch` polls it: no socket, no
+port, no origin check, and no new boundary.
 
 ---
 

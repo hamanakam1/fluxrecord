@@ -42,6 +42,12 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The development tools are pinned.** `mypy`, `ruff`, `pytest`,
+  `hypothesis` and `coverage` are pinned to exact versions. A gate that
+  moves under the build is not a gate: a formatter that reformats the tree
+  between two runs turns every pull request red for a change nobody made.
+- **CI runs on Python 3.11, 3.12, 3.13 and 3.14**, which is the range the
+  package metadata claims.
 - **The acceptance gate now stores `done`.** `decide(accept)` leaves a
   ticket in `done` rather than `accepted`, which is what the specification
   has always promised — "only `decide(accept)` creates `done`". The

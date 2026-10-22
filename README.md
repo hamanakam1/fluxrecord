@@ -94,6 +94,9 @@ creates a review, and only an operator decision creates a done.
 | `flux start <id> --owner <name> --lease 900` | Start work (acquire lease) |
 | `flux checkpoint <sid> --summary "..." --evidence "..." --next "..." --tokens <n>` | Record progress |
 | `flux renew <sid> [--lease 900]` | Extend the lease on an active session |
+| `flux handoff <sid> --to <owner> --reason "..."` | Hand a lease to another worker |
+| `flux adopt <sid> --owner <owner> --reason "..."` | Take over a lease whose owner has gone away |
+| `flux watch [--after N] [--once] [--json]` | Print new events as they land |
 | `flux reconcile` | Expire leases that have run out |
 | `flux fail <sid> --category tool --summary "..."` | Record failure |
 | `flux finish <sid> --evidence "..."` | Request review |
@@ -377,6 +380,34 @@ waiting for review, what is stale, and which command would move it.
 
 ---
 
+## Many Workers, One Ledger
+
+Two workers cannot hold the same ticket: `start()` refuses a ticket whose
+scope overlaps one that is in progress, blocked or in review. When a worker
+has to let go, it says so rather than going quiet:
+
+```bash
+flux handoff <session_id> --to terminal-2 --reason "going home"
+flux adopt <session_id> --owner terminal-2 --reason "the old worker is gone"
+```
+
+Both are recorded in the event log, with the reason, because a lease that
+changes hands without a reason is one nobody can explain later.
+
+### Watching, Without a Server
+
+The roadmap asked for WebSocket updates. A socket means a server, a port, an
+origin check and a deployment story — all of which contradict a
+local-first CLI whose core promises no network. The event log is already
+a table in the same file the reader has open:
+
+```bash
+flux watch              # print new events as they land
+flux watch --json       # one JSON object per event
+```
+
+---
+
 ## Ticket Files
 
 The ledger is the source of truth; `flux export` projects it onto disk so
@@ -531,7 +562,7 @@ risks, and what this project will deliberately not build — is in
 - [ ] Coordination: lease handoff, adoption, `flux watch`
 - [ ] A written threat model, and an event log that detects an edit
 - [ ] Freeze the wire format, and publish a conformance suite
-- [ ] WebSocket real-time updates
+- [x] Real-time updates without a server (`flux watch`)
 - [ ] Plugin system for custom tabs
 - [ ] Kubernetes manifests + Helm chart
 

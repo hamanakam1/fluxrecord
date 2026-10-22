@@ -366,13 +366,15 @@ tokens never decrease, the budget is enforced across retries, three
 identical checkpoints are a failure, the packet never exceeds its byte
 budget, and a ticket id can never walk out of the project directory.
 
-**Two gaps to close.**
+**Two gaps, both closed.**
 
-- **The matrix is too narrow.** CI runs 3.11 and 3.12 while the package
-  supports `>=3.11` and the local interpreter is 3.14. Either the support
-  range is 3.11–3.12 and the metadata says so, or the matrix grows.
-- **The tools are not pinned.** `mypy>=1.8` and `ruff>=0.1.0` will move under
-  the build. A formatter that changes between runs is a broken gate.
+- **The matrix was too narrow.** CI ran 3.11 and 3.12 while the package
+  supports `>=3.11` and the local interpreter is 3.14. The matrix now runs
+  3.11, 3.12, 3.13 and 3.14, which is the range the metadata claims.
+- **The tools were not pinned.** `mypy>=1.8` and `ruff>=0.1.0` moved under
+  the build, and a formatter that reformats the tree between two runs turns
+  every pull request red for a change nobody made. The development
+  dependencies are now pinned exactly.
 
 **And one gap that has been closed.** The specification and the code
 drifted apart — the status vocabulary, the transition table, the failure

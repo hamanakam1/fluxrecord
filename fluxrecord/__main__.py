@@ -73,6 +73,13 @@ def parser() -> argparse.ArgumentParser:
     look.add_argument("--issuer", default="")
     look.add_argument("--audience", default="")
 
+    wat = sub.add_parser("watch", help="print new events as they land")
+    wat.add_argument("--after", type=int, default=0)
+    wat.add_argument("--interval", type=float, default=1.0)
+    wat.add_argument("--limit", type=int, default=None)
+    wat.add_argument("--once", action="store_true", help="print what is there and stop")
+    wat.add_argument("--json", action="store_true", help="one JSON object per event")
+
     bench = sub.add_parser(
         "benchmark", help="measure the context a ticket costs, against re-reading it"
     )
@@ -207,6 +214,16 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--next", required=True)
     c.add_argument("--tokens", type=int, required=True)
     c.add_argument("--lease", type=int, default=900)
+
+    ho = sub.add_parser("handoff", help="hand a lease to another worker")
+    ho.add_argument("session")
+    ho.add_argument("--to", dest="owner", required=True)
+    ho.add_argument("--reason", required=True)
+
+    ad = sub.add_parser("adopt", help="take over a lease whose owner has gone away")
+    ad.add_argument("session")
+    ad.add_argument("--owner", required=True)
+    ad.add_argument("--reason", required=True)
 
     rn = sub.add_parser("renew", help="extend the lease on an active session")
     rn.add_argument("session")
@@ -391,6 +408,16 @@ def main() -> None:
             )
             return
 
+        if a.command == "watch":
+            from .watch import watch, watch_json
+
+            with Ledger(a.db, tokenizer=tokenizer) as book:
+                if a.json:
+                    watch_json(book, a.after, a.interval, a.limit, a.once)
+                else:
+                    watch(book, a.after, a.interval, a.limit, a.once)
+            return
+
         if a.command == "benchmark":
             from .benchmark import measure
             from .core import Ledger
@@ -563,6 +590,10 @@ def main() -> None:
             result = ledger.start(a.task, a.owner, a.lease)
         elif cmd == "checkpoint":
             result = ledger.checkpoint(a.session, a.summary, a.evidence, a.next, a.tokens, a.lease)
+        elif cmd == "handoff":
+            result = ledger.handoff(a.session, a.owner, a.reason)
+        elif cmd == "adopt":
+            result = ledger.adopt(a.session, a.owner, a.reason)
         elif cmd == "renew":
             result = ledger.renew(a.session, a.lease)
         elif cmd == "reconcile":

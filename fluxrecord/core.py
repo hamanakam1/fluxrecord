@@ -534,6 +534,69 @@ class Ledger:
             self.event("session.renewed", session["task_id"], session=sid, lease_until=until)
         return {"session_id": sid, "task_id": session["task_id"], "lease_until": until}
 
+    def handoff(self, sid: str, owner: str, reason: str) -> dict[str, Any]:
+        """Hand a lease to another worker, deliberately.
+
+        The lease continues; the owner changes. The reason is recorded,
+        because a handoff without a reason is a handover nobody can
+        explain later.
+        """
+        required(owner, "owner")
+        required(reason, "reason")
+        with self.transaction():
+            session = self._session(sid)
+            previous = str(session["owner"])
+            self.db.execute("UPDATE sessions SET owner=? WHERE id=?", (owner, sid))
+            self._touch(session["task_id"])
+            self.event(
+                "session.handed_off",
+                session["task_id"],
+                session=sid,
+                previous_owner=previous,
+                owner=owner,
+                reason=reason,
+            )
+        return {
+            "session_id": sid,
+            "task_id": session["task_id"],
+            "previous_owner": previous,
+            "owner": owner,
+            "lease_until": session["lease_until"],
+        }
+
+    def adopt(self, sid: str, owner: str, reason: str) -> dict[str, Any]:
+        """Take over a lease whose owner has gone away.
+
+        The operator says so, and the reason is recorded. The lease is
+        extended, because the new owner is going to need the time the old
+        one was holding.
+        """
+        required(owner, "owner")
+        required(reason, "reason")
+        with self.transaction():
+            session = self._session(sid)
+            previous = str(session["owner"])
+            until = time.time() + 900
+            self.db.execute(
+                "UPDATE sessions SET owner=?, lease_until=? WHERE id=?", (owner, until, sid)
+            )
+            self._touch(session["task_id"])
+            self.event(
+                "session.adopted",
+                session["task_id"],
+                session=sid,
+                previous_owner=previous,
+                owner=owner,
+                reason=reason,
+            )
+        return {
+            "session_id": sid,
+            "task_id": session["task_id"],
+            "previous_owner": previous,
+            "owner": owner,
+            "lease_until": until,
+        }
+
     def fail(self, sid: str, category: str, summary: str) -> dict[str, str]:
         required(category, "category")
         required(summary, "summary")
