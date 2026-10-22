@@ -409,7 +409,7 @@ class Ledger:
         with self.transaction():
             task = self.task(task_id)
             if task["status"] != "ready":
-                raise Conflict(f"task is {task['status']}; expected ready")
+                raise Conflict(f"{task_id} is {task['status']}; expected ready")
             self._check_dependencies(task)
             used = self.db.execute(
                 "SELECT COALESCE(SUM(tokens),0) FROM sessions WHERE task_id=?", (task_id,)
@@ -418,10 +418,22 @@ class Ledger:
                 raise Conflict("task token budget exhausted across attempts")
             scopes = set(json.loads(task["scope"]))
             for row in self.db.execute(
-                "SELECT id,scope FROM tasks WHERE status IN ('in_progress','blocked','review')"
+                "SELECT t.id,t.scope,s.owner,s.lease_until FROM tasks t"
+                " LEFT JOIN sessions s ON s.task_id=t.id AND s.status='active'"
+                " WHERE t.status IN ('in_progress','blocked','review')"
             ):
-                if scopes.intersection(json.loads(row["scope"])):
-                    raise Conflict(f"resource scope reserved by {row['id']}")
+                shared = scopes.intersection(json.loads(row["scope"]))
+                if not shared:
+                    continue
+                holder = row["owner"] or "another worker"
+                until = row["lease_until"]
+                until_text = (
+                    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(until)) if until else "unknown"
+                )
+                raise Conflict(
+                    f"resource scope reserved by {row['id']} "
+                    f"({', '.join(sorted(shared))}); held by {holder} until {until_text}"
+                )
             sid = uuid.uuid4().hex
             now = time.time()
             self.db.execute(

@@ -31,7 +31,12 @@ __all__ = [
     "KINDS",
     "TIMEOUT_SECONDS",
     "MAX_KEY_LENGTH",
+    "MARKER_NAMESPACE",
+    "LEGACY_MARKER_NAMESPACE",
     "marker_for",
+    "legacy_marker_for",
+    "markers_for",
+    "is_published",
 ]
 
 TIMEOUT_SECONDS = 30
@@ -88,9 +93,41 @@ CREATE TABLE IF NOT EXISTS outbox (
 Runner = Callable[[list[str]], Any]
 
 
+#: The namespace the idempotency marker is written in. It is this
+#: project's own name, because the marker is a wire format: another
+#: project's name in it is a name this project would have to break later.
+MARKER_NAMESPACE = "fluxrecord"
+
+#: The namespace written before the rename. It is still read, so a comment
+#: published by an earlier version is recognised and never sent twice. It
+#: is never written.
+LEGACY_MARKER_NAMESPACE = "taskrivet"
+
+
 def marker_for(key: str, body_hash: str) -> str:
     """The idempotency marker appended to an outbox body."""
-    return f"<!-- taskrivet:{key}:{body_hash[:16]} -->"
+    return f"<!-- {MARKER_NAMESPACE}:{key}:{body_hash[:16]} -->"
+
+
+def legacy_marker_for(key: str, body_hash: str) -> str:
+    """The marker written before the namespace was renamed."""
+    return f"<!-- {LEGACY_MARKER_NAMESPACE}:{key}:{body_hash[:16]} -->"
+
+
+def markers_for(key: str, body_hash: str) -> tuple[str, ...]:
+    """Every marker that identifies this body.
+
+    The one written now, and the one written before the namespace was
+    renamed. Both are read so that a comment published by an earlier
+    version of this tool is recognised during the rename's window.
+    """
+    return (marker_for(key, body_hash), legacy_marker_for(key, body_hash))
+
+
+def is_published(comment_bodies: list[str], key: str, body_hash: str) -> bool:
+    """Whether a comment carrying this body has already been published."""
+    markers = markers_for(key, body_hash)
+    return any(marker in body for body in comment_bodies for marker in markers)
 
 
 def _gh_json(args: list[str]) -> Any:
@@ -406,13 +443,14 @@ class GitHubSync:
         confirmed: list[str] = []
         failed: list[str] = []
         for row in rows[:limit]:
-            marker = row["marker"]
+            marker = marker_for(row["key"], row["body_hash"])
             try:
                 existing = self._comments(repo, int(row["issue"]))
             except OSError:
                 failed.append(row["key"])
                 continue
-            if any(marker in str(comment.get("body", "")) for comment in existing):
+            bodies = [str(comment.get("body", "")) for comment in existing]
+            if is_published(bodies, row["key"], row["body_hash"]):
                 self._set_state(repo, int(row["issue"]), row["key"], "confirmed")
                 confirmed.append(row["key"])
                 continue
@@ -427,7 +465,7 @@ class GitHubSync:
             url = ""
             if isinstance(response, dict):
                 url = str(response.get("html_url", ""))
-            self._set_state(repo, int(row["issue"]), row["key"], "sent", url)
+            self._set_state(repo, int(row["issue"]), row["key"], "sent", url, marker)
             sent.append(row["key"])
         return {
             "repo": repo,
@@ -453,7 +491,8 @@ class GitHubSync:
             except OSError:
                 missing.append(row["key"])
                 continue
-            if any(row["marker"] in str(comment.get("body", "")) for comment in existing):
+            bodies = [str(comment.get("body", "")) for comment in existing]
+            if is_published(bodies, row["key"], row["body_hash"]):
                 self._set_state(repo, int(row["issue"]), row["key"], "confirmed")
                 confirmed.append(row["key"])
             else:
@@ -466,7 +505,13 @@ class GitHubSync:
         }
 
     def _set_state(
-        self, repo: str, issue: int, key: str, state: str, url: str | None = None
+        self,
+        repo: str,
+        issue: int,
+        key: str,
+        state: str,
+        url: str | None = None,
+        marker: str | None = None,
     ) -> None:
         if url is None:
             self.db.execute(
@@ -477,4 +522,11 @@ class GitHubSync:
             self.db.execute(
                 "UPDATE outbox SET state=?, url=?, updated=? WHERE repo=? AND issue=? AND key=?",
                 (state, url, time.time(), repo, issue, key),
+            )
+        if marker is not None:
+            # The stored marker records what was actually written, so a row
+            # queued before the namespace was renamed says so.
+            self.db.execute(
+                "UPDATE outbox SET marker=? WHERE repo=? AND issue=? AND key=?",
+                (marker, repo, issue, key),
             )

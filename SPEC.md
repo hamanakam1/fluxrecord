@@ -320,6 +320,31 @@ Real-time updates need no server. The event log is a table in the same
 file the reader already has open, so `flux watch` polls it: no socket, no
 port, no origin check, and no new boundary.
 
+## Shared Ledgers
+
+The ledger is a file, so a shared volume already works — for one writer at
+a time. Two machines writing to the same SQLite file over a network
+filesystem is a different question, and the honest answer is that it does
+not work: WAL mode needs shared memory that network filesystems do not
+provide reliably, and the file locking SQLite relies on is not dependable
+across them either. The supported arrangements are:
+
+- **One ledger per machine.** Each worker keeps its own ledger, and the
+  repositories are shared through the GitHub sync: observations in, marked
+  comments out.
+- **One ledger on a shared volume, one writer at a time.** A volume that
+  is mounted by one machine, or by several that take turns, is fine. The
+  scope reservation is what keeps two workers from taking the same work;
+  it is enforced inside the database, so it holds for any arrangement the
+  database itself supports.
+- **Not a network filesystem.** NFS, SMB and similar are not supported
+  for concurrent writers, and no configuration of fluxrecord makes them
+  so.
+
+The rule underneath all three: the ledger is the source of truth for
+*that* ledger, and anything shared between ledgers travels as
+observations and comments — never as a shared database file.
+
 ---
 
 ## GitHub Sync Contract
@@ -337,7 +362,10 @@ outbox(repo, issue, key, body_hash, state, url)
 ```
 - `key`: Idempotency key (max 100 chars)
 - `body_hash`: SHA-256 of body
-- `marker`: `<!-- taskrivet:{key}:{digest} -->` appended to body
+- `marker`: `<!-- fluxrecord:{key}:{digest} -->` appended to body
+- The namespace was `taskrivet` before the rename. That form is still
+  read, so a comment published by an earlier version of this tool is
+  recognised and never sent twice; it is never written.
 - Reconciliation: reads comments, matches marker + actor, never blindly resends
 
 ---

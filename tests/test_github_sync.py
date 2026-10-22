@@ -1,10 +1,17 @@
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from fluxrecord import github_cycle
-from fluxrecord.github_sync import GitHubSync, marker_for
+from fluxrecord.github_sync import (
+    GitHubSync,
+    is_published,
+    legacy_marker_for,
+    marker_for,
+    markers_for,
+)
 
 
 class FakeGh:
@@ -94,7 +101,7 @@ class GitHubSyncTest(unittest.TestCase):
             self.sync.enqueue("owner/repo", 1, "key", "   ")
 
     def test_a_key_cannot_break_the_marker(self):
-        for bad in ("with space", "new\nline", "<!-- taskrivet:other -->", "semi;colon"):
+        for bad in ("with space", "new\nline", "<!-- fluxrecord:other -->", "semi;colon"):
             with self.assertRaises(ValueError):
                 self.sync.enqueue("owner/repo", 7, bad, "body")
 
@@ -154,8 +161,57 @@ class GitHubSyncTest(unittest.TestCase):
 
     def test_marker_shape_matches_the_spec(self):
         marker = marker_for("summary", "a" * 64)
-        self.assertTrue(marker.startswith("<!-- taskrivet:summary:"))
+        self.assertTrue(marker.startswith("<!-- fluxrecord:summary:"))
         self.assertTrue(marker.endswith(" -->"))
+
+    def test_the_legacy_namespace_is_read_but_never_written(self):
+        """The marker used to be written in another project's namespace.
+
+        It is still recognised, so a comment published before the rename
+        is confirmed rather than sent again, and it is never written now.
+        """
+        digest = hashlib.sha256(b"the body").hexdigest()
+        legacy = legacy_marker_for("summary", digest)
+        self.assertTrue(legacy.startswith("<!-- taskrivet:summary:"))
+        self.assertNotIn("taskrivet", marker_for("summary", digest))
+        self.assertIn(legacy, markers_for("summary", digest))
+        self.assertIn(marker_for("summary", digest), markers_for("summary", digest))
+
+    def test_a_comment_published_before_the_rename_is_never_resent(self):
+        """The whole point of the dual-read window."""
+        body = "the body"
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        self.sync.enqueue("owner/repo", 7, "summary", body)
+        # An earlier version of this tool published the comment, and died
+        # before recording that it had.
+        self.gh.existing = [{"body": f"{body}\n\n{legacy_marker_for('summary', digest)}"}]
+        published = self.sync.publish("owner/repo")
+        self.assertEqual(published["confirmed"], ["summary"])
+        self.assertEqual(self.gh.posted, [])
+
+    def test_reconciliation_recognises_a_comment_published_before_the_rename(self):
+        body = "the body"
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        self.sync.enqueue("owner/repo", 7, "summary", body)
+        self.sync.publish("owner/repo")
+        self.gh.existing = [{"body": f"{body}\n\n{legacy_marker_for('summary', digest)}"}]
+        reconciled = self.sync.reconcile("owner/repo")
+        self.assertEqual(reconciled["confirmed"], ["summary"])
+        self.assertEqual(reconciled["missing"], [])
+
+    def test_a_published_comment_carries_the_current_namespace(self):
+        self.sync.enqueue("owner/repo", 7, "summary", "the body")
+        self.sync.publish("owner/repo")
+        self.assertIn("<!-- fluxrecord:summary:", self.gh.posted[0])
+
+    def test_is_published_reads_both_namespaces(self):
+        digest = hashlib.sha256(b"the body").hexdigest()
+        current = marker_for("summary", digest)
+        legacy = legacy_marker_for("summary", digest)
+        self.assertTrue(is_published([f"text\n\n{current}"], "summary", digest))
+        self.assertTrue(is_published([f"text\n\n{legacy}"], "summary", digest))
+        self.assertFalse(is_published([f"text\n\n{current}"], "other", digest))
+        self.assertFalse(is_published(["a comment with no marker"], "summary", digest))
 
 
 class GitHubCycleTest(unittest.TestCase):
