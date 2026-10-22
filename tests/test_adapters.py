@@ -108,6 +108,31 @@ class DashboardTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             dashboard.preview(self.origin, "planned", -1)
 
+    def test_a_bearer_token_is_sent_when_one_is_given(self):
+        seen = {}
+
+        class Recording(_Handler):
+            def do_GET(self):  # noqa: N802 - http.server API
+                seen["authorization"] = self.headers.get("Authorization")
+                super().do_GET()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Recording)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            origin = f"http://127.0.0.1:{server.server_address[1]}"
+            result = dashboard.preview(origin, "planned", 0, "a-token")
+            self.assertEqual(seen["authorization"], "Bearer a-token")
+            self.assertEqual(result["boundary"]["credentials"], "bearer token")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_no_credentials_are_sent_by_default(self):
+        result = dashboard.preview(self.origin, "planned", 0)
+        self.assertEqual(result["boundary"]["credentials"], "none")
+
     def test_preview_refuses_redirects(self):
         _Handler.redirect = True
         try:

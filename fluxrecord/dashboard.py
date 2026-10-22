@@ -75,13 +75,19 @@ def _normalize(entry: Any) -> dict[str, Any]:
     return record
 
 
-def preview(url: str, status: str = "planned", offset: int = 0) -> dict[str, Any]:
+def preview(
+    url: str,
+    status: str = "planned",
+    offset: int = 0,
+    token: str | None = None,
+) -> dict[str, Any]:
     """Fetch a bounded preview of the local dashboard.
 
     Args:
         url: local dashboard origin, e.g. http://127.0.0.1:8080
         status: status filter passed through to the dashboard
         offset: row offset passed through to the dashboard
+        token: a bearer token, when the dashboard is protected
 
     Raises:
         ValueError: the url is not a local origin, or the offset is invalid
@@ -89,11 +95,10 @@ def preview(url: str, status: str = "planned", offset: int = 0) -> dict[str, Any
     """
     target = _target(url, status, offset)
     opener = request.build_opener(request.ProxyHandler({}), _NoRedirect())
-    req = request.Request(
-        target,
-        method="GET",
-        headers={"Accept": "application/json", "User-Agent": "fluxrecord"},
-    )
+    headers = {"Accept": "application/json", "User-Agent": "fluxrecord"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = request.Request(target, method="GET", headers=headers)
     try:
         with opener.open(req, timeout=TIMEOUT_SECONDS) as response:
             payload = response.read(MAX_BYTES + 1)
@@ -124,7 +129,7 @@ def preview(url: str, status: str = "planned", offset: int = 0) -> dict[str, Any
                 "redirects": "refused",
                 "max_bytes": MAX_BYTES,
                 "timeout_seconds": TIMEOUT_SECONDS,
-                "credentials": "none",
+                "credentials": "bearer token" if token else "none",
             },
             "note": "Response exceeded the byte ceiling and was clipped; no records were read.",
         }
@@ -157,7 +162,7 @@ def preview(url: str, status: str = "planned", offset: int = 0) -> dict[str, Any
             "redirects": "refused",
             "max_bytes": MAX_BYTES,
             "timeout_seconds": TIMEOUT_SECONDS,
-            "credentials": "none",
+            "credentials": "bearer token" if token else "none",
         },
         "note": "Read-only preview. Evidence about a dashboard, never authority over a task.",
     }

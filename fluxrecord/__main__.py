@@ -49,6 +49,27 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("version", help="print the package version")
 
+    token = sub.add_parser("token", help="issue and check tokens")
+    token_sub = token.add_subparsers(dest="token_command", required=True)
+
+    issue = token_sub.add_parser("issue", help="issue a signed token")
+    issue.add_argument("--subject", required=True)
+    issue.add_argument("--ttl", type=int, default=900)
+    issue.add_argument("--scope", dest="scopes", action="append", default=None)
+    issue.add_argument("--issuer", default="")
+    issue.add_argument("--audience", default="")
+    issue.add_argument("--type", dest="token_type", default="access", choices=["access", "refresh"])
+
+    check = token_sub.add_parser("verify", help="verify a token")
+    check.add_argument("token")
+    check.add_argument("--issuer", default="")
+    check.add_argument("--audience", default="")
+
+    look = token_sub.add_parser("introspect", help="describe a token (RFC 7662)")
+    look.add_argument("token")
+    look.add_argument("--issuer", default="")
+    look.add_argument("--audience", default="")
+
     doc = sub.add_parser("doctor", help="report on the ledger, the project and the adapters")
     doc.add_argument("--project", default=".fluxrecord")
     doc.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
@@ -128,6 +149,7 @@ def parser() -> argparse.ArgumentParser:
         choices=["planned", "backlog", "progress", "blocked", "show_tell"],
         default="planned",
     )
+    d.add_argument("--token", default=None, help="bearer token, when the dashboard is protected")
     d.add_argument("--offset", type=int, default=0)
 
     b = sub.add_parser("tools")
@@ -248,7 +270,7 @@ def main() -> None:
         if a.command == "dashboard-preview":
             from .dashboard import preview
 
-            print(json.dumps(preview(a.url, a.status, a.offset), indent=2))
+            print(json.dumps(preview(a.url, a.status, a.offset, a.token), indent=2))
             return
 
         if a.command == "tools":
@@ -262,6 +284,40 @@ def main() -> None:
         if a.command == "events":
             ledger = Ledger(a.db)
             print(json.dumps(ledger.events(a.after), indent=2, ensure_ascii=False))
+            return
+
+        if a.command == "token":
+            from .tokens import introspect_token, issue_token, secret_from_environment, verify_token
+
+            secret = secret_from_environment()
+            if a.token_command == "issue":
+                print(
+                    json.dumps(
+                        issue_token(
+                            a.subject,
+                            secret,
+                            a.ttl,
+                            a.issuer,
+                            a.audience,
+                            tuple(a.scopes or ()),
+                            a.token_type,
+                        ),
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                )
+                return
+            if a.token_command == "verify":
+                report = verify_token(a.token, secret, a.issuer, a.audience)
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+                return
+            print(
+                json.dumps(
+                    introspect_token(a.token, secret, a.issuer, a.audience),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
             return
 
         if a.command == "doctor":

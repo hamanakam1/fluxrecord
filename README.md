@@ -121,6 +121,7 @@ creates a review, and only an operator decision creates a done.
 | `flux art [--style large\|small\|mini\|minimal\|ascii] [--color]` | Print the wordmark |
 | `flux version` | Package version |
 | `flux doctor [--project .fluxrecord] [--dashboard URL]` | Report on the ledger, the project and the adapters |
+| `flux token issue\|verify\|introspect ...` | Issue and check tokens |
 
 ---
 
@@ -301,6 +302,26 @@ response.body["access_token"]
 
 Routes: `login`, `refresh`, `revoke`, `introspect` (RFC 7662) and `logout`.
 Errors come back as RFC 7807 problems.
+
+From a shell, the same module is three commands:
+
+```bash
+export FLUX_TOKEN_SECRET=...          # never pass a secret as an argument
+flux token issue --subject terminal-1 --scope read --ttl 300
+flux token verify "$TOKEN"
+flux token introspect "$TOKEN"
+```
+
+A secret in an argument is a secret in the shell history and in the
+process table, so the signing secret comes from the environment (or from
+a file named by `FLUX_TOKEN_SECRET_FILE`) and never from the command
+line.
+
+A dashboard that is protected can then be previewed with that token:
+
+```bash
+flux dashboard-preview --url http://127.0.0.1:8080 --token "$TOKEN"
+```
 
 The rules that matter are enforced rather than assumed: the algorithm is
 fixed to HS256 and read from the header rather than trusted from it, so
