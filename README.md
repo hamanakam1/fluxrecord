@@ -428,6 +428,20 @@ The chain is off by default: a ledger nobody signs is still a ledger, and
 
 ---
 
+## Threat Model
+
+What fluxrecord protects, from whom, and what it has decided not to solve,
+is written down in [docs/threat-model.md](docs/threat-model.md). The
+decisions that shape it — why the auth module is a library and not a
+service, and what that costs — are in
+[docs/adr/0001-auth-is-a-library.md](docs/adr/0001-auth-is-a-library.md).
+
+Both name what is accepted rather than solved. A ledger on a shared
+volume can still be edited by anyone with write access; the signed event
+chain makes the edit detectable, not impossible.
+
+---
+
 ## Ticket Files
 
 The ledger is the source of truth; `flux export` projects it onto disk so

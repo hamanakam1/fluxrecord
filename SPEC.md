@@ -484,6 +484,15 @@ updated_at: "2026-10-21T00:00:00Z"
 
 ---
 
+## Threat Model
+
+`docs/threat-model.md` names the assets, the actors, the boundaries that
+are enforced and checked, and the edges that are accepted rather than
+solved. `docs/adr/0001-auth-is-a-library.md` records why the auth module
+is a library and not a service.
+
+---
+
 ## Governance
 
 - **Standard evolves** via tickets against this repo
