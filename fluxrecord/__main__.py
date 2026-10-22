@@ -236,7 +236,12 @@ def parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("pack")
     c.add_argument("task")
-    c.add_argument("--max-bytes", type=int, default=12000)
+    c.add_argument(
+        "--max-bytes",
+        type=int,
+        default=None,
+        help="the context budget; the default comes from the ticket kind's policy",
+    )
     c.add_argument("--packet-only", action="store_true")
     c.add_argument(
         "--since",
@@ -331,6 +336,9 @@ def main() -> None:
             return
 
         from .core import Ledger
+        from .tokenizers import current as current_tokenizer
+
+        tokenizer = current_tokenizer()
 
         if a.command == "events":
             ledger = Ledger(a.db)
@@ -474,7 +482,7 @@ def main() -> None:
                 ledger.close()
             return
 
-        ledger = Ledger(a.db)
+        ledger = Ledger(a.db, tokenizer=tokenizer)
         cmd = a.command
         result: dict[str, Any]
 

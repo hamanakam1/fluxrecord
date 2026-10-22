@@ -8,7 +8,7 @@ import re
 import sqlite3
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -75,6 +75,17 @@ _TASK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 #: new category, so it is refused rather than recorded.
 FAILURE_CATEGORIES = ("lease_expired", "budget", "tool", "dependency", "no_progress")
 
+#: The context budget a ticket kind gets when nobody says otherwise. The
+#: byte budget is exact; these are the defaults the specification names.
+BUDGET_POLICY: dict[str, int] = {
+    "code": 12000,
+    "fix": 8000,
+    "planning": 6000,
+    "closure": 4000,
+    "product": 8000,
+}
+DEFAULT_BUDGET = 12000
+
 
 def positive(value: Any, name: str) -> None:
     if type(value) is not int or value <= 0:
@@ -87,10 +98,17 @@ def required(value: Any, name: str) -> None:
 
 
 class Ledger:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        tokenizer: Callable[[str], int] | None = None,
+    ) -> None:
         path = Path(path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(path, timeout=10, isolation_level=None)
+        # A tokenizer is injected, never imported: the core stays stdlib-only
+        # and the plug-in boundary stays a boundary.
+        self.tokenizer = tokenizer
         try:
             self._prepare(path)
         except BaseException:
@@ -598,15 +616,21 @@ class Ledger:
             self.event("context.attached", task_id, hash=digest, source=source)
         return {"hash": digest, "bytes": len(body.encode())}
 
+    def budget_for(self, kind: str) -> int:
+        """The context budget a kind of work gets by default."""
+        return BUDGET_POLICY.get(kind, DEFAULT_BUDGET)
+
     def pack(
         self,
         task_id: str,
-        max_bytes: int = 12000,
+        max_bytes: int | None = None,
         since: str | None = None,
     ) -> dict[str, Any]:
-        positive(max_bytes, "max_bytes")
         self.reconcile()
         task = self.task(task_id)
+        if max_bytes is None:
+            max_bytes = self.budget_for(str(task["kind"]))
+        positive(max_bytes, "max_bytes")
         latest = self.db.execute(
             "SELECT c.id,c.summary,c.evidence,c.next_step,c.tokens FROM checkpoints c"
             " JOIN sessions s ON s.id=c.session_id WHERE s.task_id=?"
@@ -686,9 +710,11 @@ class Ledger:
             "packet_bytes": len(encoded),
             "packet_hash": digest,
             "omitted": omitted,
-            "note": "Byte budget is exact; model tokenizer usage is unknown, so no "
-            "token count is reported.",
+            "note": "The byte budget is exact. A token count is reported only "
+            "when a tokenizer is registered.",
         }
+        if self.tokenizer is not None:
+            result["token_count"] = int(self.tokenizer(encoded.decode("utf-8", errors="replace")))
         if since:
             result["delta"] = self.delta(task_id, since, packet, digest)
         return result

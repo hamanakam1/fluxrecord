@@ -441,6 +441,25 @@ That is where *less repeated context* stops being a slogan and becomes a
 number: the delta is smaller than the packet, and the saving is the
 difference.
 
+### Tokenizer and Budget
+
+The byte budget is exact and always there. A token count appears only
+when a tokenizer has been registered — a plug-in, not a dependency, so
+the package stays stdlib-only and works on an air-gapped machine.
+
+```python
+from fluxrecord import tokenizers
+from fluxrecord.core import Ledger
+
+tokenizers.register(my_tokenizer)          # optional
+with Ledger("ledger.sqlite", tokenizer=tokenizers.current()) as ledger:
+    packet = ledger.pack("M-397001")        # now carries a token_count
+```
+
+The budget a ticket gets comes from a policy by kind — `code` gets 12000
+bytes, `fix` gets 8000, `planning` gets 6000 — so `--max-bytes` is
+something a caller can override, not something it has to remember.
+
 ### Checkpoint = Evidence + Progress
 ```bash
 flux checkpoint <sid> \

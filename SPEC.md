@@ -286,6 +286,20 @@ packet with that address — the checkpoints that landed, the failures that
 were recorded, the context that was attached — and says so when nothing
 changed. The full packet is still the truth; the delta is what is new.
 
+### Budget Policy
+
+A ticket's context budget comes from a policy by kind unless the caller
+says otherwise: `code` 12000 bytes, `fix` 8000, `planning` 6000,
+`closure` 4000, `product` 8000, anything else 12000. `--max-bytes`
+overrides it.
+
+### Tokenizer
+
+A tokenizer is a plug-in, never a dependency. The core imports nothing to
+measure tokens; a caller registers one and passes it to the ledger. When
+one is registered, packets carry a `token_count`; when none is, the field
+is absent and the byte budget is the authority.
+
 ---
 
 ## GitHub Sync Contract
