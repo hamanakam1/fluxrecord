@@ -21,8 +21,9 @@ __all__ = ["WIRE_FORMAT", "SCHEMA", "validate", "problems"]
 WIRE_FORMAT = 1
 
 #: The shapes other tools may rely on. "required" lists the fields that
-#: must be there; "types" says what each one holds; "frozen" means the
-#: shape may not grow a field without a version bump.
+#: must be there; "types" says what each one holds; "values" says the
+#: closed vocabulary of a field; "frozen" means the shape may not grow a
+#: field without a version bump.
 SCHEMA: dict[str, Any] = {
     "wire_format": WIRE_FORMAT,
     "ticket": {
@@ -61,6 +62,53 @@ SCHEMA: dict[str, Any] = {
             "owner": "string",
             "seed_key": "string",
             "updated_at": "number",
+        },
+        "values": {
+            "kind": ["code", "fix", "closure", "planning", "product"],
+            "status": ["ready", "in_progress", "blocked", "review", "done", "cancelled"],
+        },
+        "frozen": True,
+    },
+    "ticket_file": {
+        # The front matter of an exported ticket file. The file is what a
+        # human reviews and what a third party would read, so its shape is
+        # frozen too. The times are strings here, where the ledger keeps
+        # them as numbers: the file is a document, not a record.
+        "required": [
+            "id",
+            "title",
+            "status",
+            "priority",
+            "kind",
+            "scope",
+            "token_budget",
+            "tags",
+            "depends_on",
+            "blocks",
+            "owner",
+            "seed_key",
+            "created_at",
+            "updated_at",
+        ],
+        "types": {
+            "id": "string",
+            "title": "string",
+            "status": "string",
+            "priority": "integer",
+            "kind": "string",
+            "scope": "string[]",
+            "token_budget": "integer",
+            "tags": "string[]",
+            "depends_on": "string[]",
+            "blocks": "string[]",
+            "owner": "string",
+            "seed_key": "string",
+            "created_at": "string",
+            "updated_at": "string",
+        },
+        "values": {
+            "kind": ["code", "fix", "closure", "planning", "product"],
+            "status": ["ready", "in_progress", "blocked", "review", "done", "cancelled"],
         },
         "frozen": True,
     },
@@ -197,6 +245,9 @@ def problems(shape: str, value: Any) -> list[str]:
     for field, kind in types.items():
         if field in value and not _matches(value[field], kind):
             found.append(f"{shape}.{field} is not {kind}")
+    for field, allowed in schema.get("values", {}).items():
+        if field in value and value[field] not in allowed:
+            found.append(f"{shape}.{field} is {value[field]!r}, not one of {allowed}")
     if schema.get("frozen"):
         for field in value:
             if field not in types:

@@ -6,9 +6,6 @@ is killed between two writes. This exercises them by killing things on
 purpose.
 """
 
-import os
-import signal
-import sqlite3
 import subprocess
 import sys
 import tempfile
