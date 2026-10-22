@@ -187,6 +187,27 @@ class IntakeTest(unittest.TestCase):
         ids = sorted(task["id"] for task in self.ledger.status()["tasks"])
         self.assertEqual(ids, ["M-000001", "M-000002"])
 
+    def test_a_noisy_kind_cannot_starve_the_kind_that_needs_work(self):
+        """A hundred successful runs must not hide one failure."""
+        for index in range(30):
+            self.observe(
+                "runs",
+                {
+                    "id": 1000 + index,
+                    "name": f"build-{index}",
+                    "conclusion": "success",
+                    "status": "completed",
+                },
+            )
+        self.observe(
+            "runs",
+            {"id": 9999, "name": "the-build", "conclusion": "failure", "status": "completed"},
+        )
+        result = intake(self.ledger, self.sync, "owner/repo", limit_per_kind=5)
+        self.assertEqual(result["created_count"], 1)
+        ticket = self.ledger.task_view(result["created"][0]["ticket"])
+        self.assertIn("the-build", ticket["objective"])
+
     def test_a_failed_ticket_blocks_the_ledger_from_lying(self):
         self.observe(
             "issues",

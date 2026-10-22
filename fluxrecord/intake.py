@@ -21,6 +21,8 @@ import json
 import re
 from typing import Any
 
+from .github_sync import KINDS
+
 __all__ = ["intake", "intake_dashboard", "ACTIONS", "actionable"]
 
 _TICKET_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -122,7 +124,15 @@ def intake(
         limit_per_kind: how many observations of each kind to consider
         include_informational: also ticket observations that imply no work
     """
-    observations = sync.observations(repo, limit=limit_per_kind * 10)
+    # Each kind is asked for on its own. A single query with one limit
+    # would let a chatty kind — comments, say — use up the budget and
+    # starve the kind that actually needs work: a failed run buried
+    # under a hundred successful ones.
+    selected = list(kinds) if kinds else list(KINDS)
+    observations: list[dict[str, Any]] = []
+    for kind in selected:
+        observations.extend(sync.observations(repo, kind=kind, limit=limit_per_kind))
+
     per_kind: dict[str, int] = {}
     created: list[dict[str, str]] = []
     attached: list[dict[str, str]] = []
@@ -130,16 +140,12 @@ def intake(
 
     for observation in observations:
         kind = observation["kind"]
-        seen = per_kind.get(kind, 0)
-        if seen >= limit_per_kind:
-            continue
-        per_kind[kind] = seen + 1
-
         action = observation["action"]
         status = observation.get("status", "")
         if not include_informational and not actionable(kind, status, action):
             skipped.append({"identity": observation["identity"], "reason": "no action implied"})
             continue
+        per_kind[kind] = per_kind.get(kind, 0) + 1
 
         key = f"gh:{repo}#{kind}#{observation['identity']}"
         evidence = _evidence(repo, observation)
