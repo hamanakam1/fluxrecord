@@ -76,6 +76,17 @@ class ImporterTest(unittest.TestCase):
         self.assertNotEqual(fresh, "M-397001")
         self.assertEqual(self.ledger.task_view(fresh)["title"], "JWT auth")
 
+    def test_only_ticket_ids_count_as_dependencies(self):
+        self.csv.write_text(
+            HEADER + "M-397001,Core,Split core,P0,Inf,fluxrecord/core.py,"
+            '"Split the monolith.","All routes work","M-397002, some prose"'
+            "\n" + "M-397002,Core,Second,P0,Inf,fluxrecord/core.py,"
+            '"Second task.","Done",'
+            "\n"
+        )
+        import_csv(self.ledger, self.csv)
+        self.assertEqual(self.ledger.task_view("M-397001")["depends_on"], ["M-397002"])
+
     def test_a_dry_run_writes_nothing(self):
         result = import_csv(self.ledger, self.csv, dry_run=True)
         self.assertEqual(result["imported_count"], 2)

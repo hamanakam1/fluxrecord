@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+import re
 from typing import Any
 
 __all__ = ["import_csv", "read_rows"]
@@ -40,6 +41,10 @@ _ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 _PRIORITY = {"P0": 1, "P1": 1, "P2": 2, "P3": 3}
+
+#: Only a dependency that names a ticket can be one. The column in a CSV
+#: backlog usually mixes ids with prose, and prose is not a dependency.
+_TICKET_ID = re.compile(r"M-\d{6}")
 
 
 def _pick(row: dict[str, str], field: str) -> str:
@@ -134,7 +139,9 @@ def import_csv(
             "title": _pick(row, "title") or objective,
             "priority": priority,
             "tags": sorted(set(tags)),
-            "depends_on": _split(_pick(row, "depends_on")),
+            "depends_on": [
+                item for item in _split(_pick(row, "depends_on")) if _TICKET_ID.fullmatch(item)
+            ],
             "blocks": _split(_pick(row, "blocks")),
             "owner": _pick(row, "owner"),
             "seed_key": f"csv:{task_id}",

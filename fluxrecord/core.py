@@ -222,7 +222,8 @@ class Ledger:
             raise ValueError("priority must be 1, 2, or 3")
         if seed_key and len(seed_key) > 100:
             raise ValueError("seed_key must be at most 100 characters")
-        scope = scope or [task_id]
+        if scope is None:
+            scope = [task_id]
         if not isinstance(scope, list) or not scope:
             raise ValueError("scope must be a nonempty list of resource keys")
         for key in scope:
@@ -315,6 +316,7 @@ class Ledger:
             task = self.task(task_id)
             if task["status"] != "ready":
                 raise Conflict(f"task is {task['status']}; expected ready")
+            self._check_dependencies(task)
             used = self.db.execute(
                 "SELECT COALESCE(SUM(tokens),0) FROM sessions WHERE task_id=?", (task_id,)
             ).fetchone()[0]
@@ -412,6 +414,20 @@ class Ledger:
                     else "Three consecutive checkpoints cite identical evidence.",
                 )
         return {"session_id": sid, "status": "blocked" if blocked else "active", "tokens": tokens}
+
+    def _check_dependencies(self, task: dict[str, Any]) -> None:
+        """Refuse work whose dependencies are not met.
+
+        The specification puts "dependencies met" on the way into READY, so
+        a ticket that names a dependency cannot be worked on until that
+        dependency is accepted.
+        """
+        for dependency in json.loads(task["depends_on"]):
+            row = self.db.execute("SELECT status FROM tasks WHERE id=?", (dependency,)).fetchone()
+            if row is None:
+                raise Conflict(f"dependency {dependency} is not a known ticket")
+            if row["status"] not in ("accepted", "done"):
+                raise Conflict(f"dependency {dependency} is {row['status']}")
 
     def renew(self, sid: str, lease_seconds: int = 900) -> dict[str, Any]:
         """Extend the lease of an active session."""
