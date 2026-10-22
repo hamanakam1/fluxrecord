@@ -142,6 +142,21 @@ class IntakeTest(unittest.TestCase):
         packet = self.ledger.pack("M-397001")
         self.assertEqual(len(packet["packet"]["context"]), 1)
 
+    def test_evidence_does_not_land_on_a_finished_ticket(self):
+        self.ledger.add_task("M-397001", "Existing", "Acceptance", scope=["repo/x"])
+        started = self.ledger.start("M-397001", "terminal-1")
+        self.ledger.checkpoint(started["session_id"], "s", "e", "n", 10)
+        self.ledger.finish(started["session_id"], "evidence")
+        self.ledger.decide("M-397001", "accept", "reviewed")
+        self.observe(
+            "comments",
+            {"id": 99, "body": "re M-397001 please look", "html_url": "https://x.test/c/99"},
+        )
+        result = intake(self.ledger, self.sync, "owner/repo")
+        self.assertEqual(result["attached_count"], 0)
+        self.assertEqual(result["created_count"], 0)
+        self.assertIn("closed", result["skipped"][0]["reason"])
+
     def test_an_observation_naming_an_unknown_ticket_creates_one(self):
         self.observe(
             "comments",

@@ -148,10 +148,20 @@ def intake(
         named = str(observation.get("ticket") or "")
         if named:
             try:
-                ledger.task_view(named)
+                target = ledger.task_view(named)
             except ValueError:
                 named = ""
             else:
+                if target.get("status") in ("done", "cancelled"):
+                    # The work is finished; new evidence about it belongs
+                    # on a new ticket, not on a closed one.
+                    skipped.append(
+                        {
+                            "identity": observation["identity"],
+                            "reason": "the ticket it names is closed",
+                        }
+                    )
+                    continue
                 ledger.add_context(
                     named,
                     evidence,

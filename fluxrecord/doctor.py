@@ -243,7 +243,10 @@ def diagnose(
     if dashboard.get("probed") and dashboard.get("reachable") is False:
         notes.append("the local dashboard did not answer")
 
+    from .wire import WIRE_FORMAT
+
     return {
+        "wire_format": WIRE_FORMAT,
         "ledger": ledger,
         "project": project,
         "github": github,
