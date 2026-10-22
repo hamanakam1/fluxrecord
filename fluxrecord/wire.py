@@ -145,9 +145,9 @@ SCHEMA: dict[str, Any] = {
             "age_seconds": "number",
             "tokens": "integer",
             "last_evidence": "string",
-            "last_evidence_at": "number",
+            "last_evidence_at": "number|null",
             "failures": "integer",
-            "lease_remaining": "number",
+            "lease_remaining": "number|null",
         },
     },
 }
@@ -162,6 +162,11 @@ _TYPES: dict[str, tuple[type, ...]] = {
 
 
 def _matches(value: Any, kind: str) -> bool:
+    """Whether a value has a type. "a|b" means a or b."""
+    if "|" in kind:
+        return any(_matches(value, part) for part in kind.split("|"))
+    if kind == "null":
+        return value is None
     expected = _TYPES.get(kind)
     if expected is None:
         return True

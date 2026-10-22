@@ -276,10 +276,16 @@
           "type": "integer"
         },
         "last_evidence_at": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "lease_remaining": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         }
       }
     }
