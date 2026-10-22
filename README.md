@@ -1,14 +1,13 @@
 # fluxrecord
 
 ```text
-▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓      ▓▓  ▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓
-▓▓         ▓▓        ▓▓      ▓▓  ▓▓   ▓▓  ▓▓        ▓▓        ▓▓   ▓▓  ▓▓   ▓▓  ▓▓   ▓▓
-▓▓▓▓▓▓     ▓▓        ▓▓      ▓▓  ▓▓▓▓▓▓   ▓▓▓▓▓▓    ▓▓▓▓▓▓    ▓▓▓▓▓▓   ▓▓▓▓▓▓   ▓▓   ▓▓
-▓▓         ▓▓        ▓▓      ▓▓  ▓▓   ▓▓  ▓▓        ▓▓        ▓▓  ▓▓   ▓▓  ▓▓   ▓▓   ▓▓
-▓▓         ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓   ▓▓  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ▓▓   ▓▓  ▓▓   ▓▓  ▓▓   ▓▓
+▅▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇█
+█▀▀▀▀  █      █   █  █   █  █▀▀▀▄  █▀▀▀▀  ▄▀▀▀▀  ▄▀▀▀▄  █▀▀▀▄  █▀▀▀▄
+█▄▄▄   █      █   █  ▀▄ ▄▀  █▄▄▄▀  █▄▄▄   █      █   █  █▄▄▄▀  █   █
+█      █      █   █   ▄▀▄   █ ▀▄   █      █      █   █  █ ▀▄   █   █
+█      █▄▄▄▄  ▀▄▄▄▀  █   █  █   █  █▄▄▄▄  ▀▄▄▄▄  ▀▄▄▄▀  █   █  █▄▄▄▀
+  Less repeated context. More accepted work. Visible failures.
 ```
-
-**Less repeated context. More accepted work. Visible failures.**
 
 ---
 
@@ -81,6 +80,44 @@ INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
 | `flux fail <sid> --category tool --summary "..."` | Record failure |
 | `flux finish <sid> --evidence "..."` | Request review |
 | `flux decide <id> accept\|retry\|cancel --reason "..."` | Operator decision |
+| `flux art [--style large\|small\|mini\|minimal\|ascii] [--color]` | Print the wordmark |
+
+---
+
+## Wordmark
+
+The mark is a signal in flight: a flux waveform riding above a half-block
+letterform, with the brand line locked underneath. Five styles ship, and every
+one of them is a single call away.
+
+```bash
+flux art                 # hero lockup
+flux art --style small   # compact wordmark (what `flux init` prints)
+flux art --style mini    # sparkline over the bare name
+flux art --style ascii   # pure ASCII, no block glyphs
+flux art --color         # ANSI gradient (respects NO_COLOR)
+```
+
+```text
+█▀▀▀▀ █     █   █ █   █ █▀▀▀▄ █▀▀▀▀ ▄▀▀▀▀ ▄▀▀▀▄ █▀▀▀▄ █▀▀▀▄
+█▄▄▄  █     █   █ ▀▄ ▄▀ █▄▄▄▀ █▄▄▄  █     █   █ █▄▄▄▀ █   █
+█     █     █   █  ▄▀▄  █ ▀▄  █     █     █   █ █ ▀▄  █   █
+█     █▄▄▄▄ ▀▄▄▄▀ █   █ █   █ █▄▄▄▄ ▀▄▄▄▄ ▀▄▄▄▀ █   █ █▄▄▄▀
+  Less repeated context. More accepted work. Visible failures.
+```
+
+```text
+▅▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃▄▆▇███▇▆▅▃▂▁▁▁▂▃
+   fluxrecord
+```
+
+```text
+##### #.... #...# #...# ####. ##### .#### .###. ####. ####.
+#.... #.... #...# .#.#. #...# #.... #.... #...# #...# #...#
+####. #.... #...# ..#.. ####. ####. #.... #...# ####. #...#
+#.... #.... #...# .#.#. #.#.. #.... #.... #...# #.#.. #...#
+#.... ##### ##### #...# #..#. ##### .#### .###. #..#. ####.
+```
 
 ---
 

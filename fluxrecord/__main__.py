@@ -1,12 +1,11 @@
 """JSON-first CLI for fluxrecord."""
+
 import argparse
 import json
 import os
 import sqlite3
 import sys
 from pathlib import Path
-
-from .core import Ledger
 
 
 def parser() -> argparse.ArgumentParser:
@@ -21,6 +20,12 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("init")
     sub.add_parser("status")
+
+    art = sub.add_parser("art", help="print the fluxrecord wordmark")
+    art.add_argument(
+        "--style", choices=["large", "small", "mini", "minimal", "ascii"], default="large"
+    )
+    art.add_argument("--color", action="store_true", help="ANSI colour (off when NO_COLOR is set)")
 
     for command in ("github-poll", "github-status"):
         g = sub.add_parser(command)
@@ -148,11 +153,19 @@ def main() -> None:
             print(json.dumps(ledger.events(a.after), indent=2, ensure_ascii=False))
             return
 
+        if a.command == "art":
+            from .ascii_art import get_art
+
+            paint = a.color and sys.stdout.isatty()
+            sys.stdout.write(get_art(a.style, color=paint) + "\n")
+            return
+
         if a.command == "init":
             from .ascii_art import get_art
+
             result = {"schema": 1, "status": "ready", "dispatch_enabled": False}
             print(json.dumps(result, indent=2, ensure_ascii=False))
-            print(get_art("small"), file=sys.stderr)
+            print(get_art("small", color=sys.stderr.isatty()), file=sys.stderr)
             return
 
         ledger = Ledger(a.db)
@@ -161,7 +174,9 @@ def main() -> None:
         if cmd == "status":
             result = ledger.status()
         elif cmd == "task-add":
-            result = ledger.add_task(a.id, a.objective, a.acceptance, a.kind, a.scope, a.token_budget)
+            result = ledger.add_task(
+                a.id, a.objective, a.acceptance, a.kind, a.scope, a.token_budget
+            )
         elif cmd == "start":
             result = ledger.start(a.task, a.owner, a.lease)
         elif cmd == "checkpoint":
@@ -173,7 +188,9 @@ def main() -> None:
         elif cmd in ("accept", "retry", "cancel"):
             result = ledger.decide(a.task, cmd, a.reason)
         elif cmd == "context-add":
-            result = ledger.add_context(a.task, Path(a.file).read_text(), a.source, a.priority, a.ttl)
+            result = ledger.add_context(
+                a.task, Path(a.file).read_text(), a.source, a.priority, a.ttl
+            )
         elif cmd == "pack":
             result = ledger.pack(a.task, a.max_bytes)
             if a.packet_only:
