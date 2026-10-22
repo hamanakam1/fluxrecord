@@ -81,6 +81,27 @@ fi
         result = self.flux("task-add", "M-1", expect=2)
         self.assertIn("required", result.stderr.lower())
 
+    def test_the_readme_documents_every_command(self):
+        readme = (Path(__file__).resolve().parent.parent / "README.md").read_text()
+        from fluxrecord.__main__ import parser
+
+        documented: set[str] = set()
+        for line in readme.splitlines():
+            if not line.startswith("| `flux "):
+                continue
+            words = line.split("`")[1].split()
+            if len(words) > 1:
+                for alternative in words[1].split("|"):
+                    documented.add(alternative.replace("\\", "").strip())
+        available: set[str] = set()
+        for action in parser()._subparsers._group_actions:  # noqa: SLF001
+            choices = getattr(action, "choices", None)
+            if isinstance(choices, dict):
+                available.update(choices)
+        self.assertTrue(available)
+        for name in sorted(available):
+            self.assertIn(name, documented, f"{name} is not in the README")
+
     def test_a_usage_error_is_json(self):
         error = self.json_err("task-add", "M-1")
         self.assertEqual(error["type"], "UsageError")

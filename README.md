@@ -88,6 +88,7 @@ creates a review, and only an operator decision creates a done.
 | `flux fail <sid> --category tool --summary "..."` | Record failure |
 | `flux finish <sid> --evidence "..."` | Request review |
 | `flux decide <id> accept\|retry\|cancel --reason "..."` | Operator decision |
+| `flux accept\|retry\|cancel <id> --reason "..."` | The same decision, one command per outcome |
 | `flux init [--project .fluxrecord]` | Create the ledger and the project layout |
 | `flux export [--project .fluxrecord]` | Write tickets and evidence as files |
 | `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
@@ -102,6 +103,7 @@ creates a review, and only an operator decision creates a done.
 | `flux tools [--history] [--limit N]` | Local executable inventory |
 | `flux dashboard-preview --url http://127.0.0.1:8080` | Bounded local dashboard preview |
 | `flux github-poll --repo owner/repo` | Observe a repository |
+| `flux github-status --repo owner/repo` | What has been observed, and what is queued |
 | `flux github-publish --repo owner/repo --issue N --key K --body B` | Queue and publish a marked comment |
 | `flux github-reconcile --repo owner/repo` | Confirm sent comments against the issue |
 | `flux github-cycle --config cycle.json` | One observe/reconcile/publish cycle |
