@@ -47,6 +47,7 @@ def parser() -> argparse.ArgumentParser:
 
     b = sub.add_parser("tools")
     b.add_argument("--history", action="store_true")
+    b.add_argument("--limit", type=int, default=50)
 
     e = sub.add_parser("events")
     e.add_argument("--after", type=int, default=0)
@@ -144,7 +145,7 @@ def main() -> None:
         if a.command == "tools":
             from .tools import inventory
 
-            print(json.dumps(inventory(a.history), indent=2))
+            print(json.dumps(inventory(a.history, a.limit), indent=2))
             return
 
         from .core import Ledger

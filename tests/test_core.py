@@ -15,7 +15,9 @@ class LedgerTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / "ledger.sqlite"
         self.l = Ledger(self.path)
-        self.l.add_task("a", "Fix search", "Regression passes", scope=["repo/search"], token_budget=100)
+        self.l.add_task(
+            "a", "Fix search", "Regression passes", scope=["repo/search"], token_budget=100
+        )
 
     def tearDown(self):
         self.l.close()
@@ -186,11 +188,15 @@ class LedgerTest(unittest.TestCase):
     def test_cli_packet_matches_budget_and_errors_are_json(self):
         self.l.add_context("a", "界 context", "test")
         cmd = [sys.executable, "-m", "fluxrecord", "--db", str(self.path)]
-        result = subprocess.run(cmd + ["pack", "a", "--max-bytes", "1000", "--packet-only"], capture_output=True)
+        result = subprocess.run(
+            cmd + ["pack", "a", "--max-bytes", "1000", "--packet-only"], capture_output=True
+        )
         self.assertEqual(result.returncode, 0)
         self.assertLessEqual(len(result.stdout), 1000)
         self.assertEqual(json.loads(result.stdout)["objective"], "Fix search")
-        result = subprocess.run(cmd + ["start", "missing", "--owner", "worker"], capture_output=True)
+        result = subprocess.run(
+            cmd + ["start", "missing", "--owner", "worker"], capture_output=True
+        )
         self.assertEqual(result.returncode, 2)
         self.assertIn("unknown task", json.loads(result.stderr)["error"])
 
