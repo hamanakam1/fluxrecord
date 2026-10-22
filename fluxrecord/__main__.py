@@ -6,12 +6,26 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
+
+
+class JsonParser(argparse.ArgumentParser):
+    """An argument parser that reports usage errors as JSON.
+
+    The CLI is JSON-first, so an error a user can trigger by typing should
+    look like every other error the CLI produces.
+    """
+
+    def error(self, message: str) -> NoReturn:
+        payload = {"error": message, "type": "UsageError"}
+        sys.stderr.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+        raise SystemExit(2)
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description="fluxrecord: purposeful agent work, bounded context, visible failures."
+    p = JsonParser(
+        prog="flux",
+        description="fluxrecord: purposeful agent work, bounded context, visible failures.",
     )
     p.add_argument(
         "--db",
