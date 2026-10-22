@@ -29,6 +29,13 @@ jobs:
       - name: Run tests
         run: python3 -m unittest discover -s tests -v
 
+      - name: Report coverage
+        run: |
+          python -c "import pathlib, site; pathlib.Path(site.getsitepackages()[0], 'coverage.pth').write_text('import coverage; coverage.process_startup()')"
+          COVERAGE_PROCESS_START=$PWD/pyproject.toml python -m coverage run -m unittest discover -s tests
+          python -m coverage combine
+          python -m coverage report
+
       - name: Type check
         run: mypy fluxrecord/
 

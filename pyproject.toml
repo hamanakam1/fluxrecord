@@ -27,6 +27,7 @@ dev = [
     "hypothesis>=6.90",
     "mypy>=1.8",
     "ruff>=0.1.0",
+    "coverage>=7.4",
 ]
 
 [project.urls]
@@ -66,6 +67,7 @@ addopts = "-v"
 [tool.coverage.run]
 source = ["fluxrecord"]
 omit = ["tests/*", "*/__pycache__/*"]
+parallel = true
 
 [tool.coverage.report]
 exclude_lines = ["pragma: no cover", "raise NotImplementedError"]
