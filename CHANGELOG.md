@@ -1,0 +1,76 @@
+# Changelog
+
+All notable changes to fluxrecord are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
+uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] — 2026-10-22
+
+The ledger, the CLI and the specification were brought into agreement, and
+the adapters the CLI promised were written.
+
+### Added
+
+- **Wordmark.** The mark is now one idea in five styles: a flux waveform
+  riding above a half-block letterform. `flux art` prints it, with an
+  optional ANSI gradient that honours `NO_COLOR`.
+- **Adapters.** `fluxrecord.tools` (local executable inventory),
+  `fluxrecord.dashboard` (bounded, GET-only local preview) and
+  `fluxrecord.github_sync` with `fluxrecord.github_cycle` (durable GitHub
+  observations and an idempotent outbox).
+- **Authentication.** `fluxrecord.auth`: JWT issuance and verification,
+  bearer middleware, and the login, refresh, revoke, introspect and
+  logout routes. HS256 only, stdlib only, framework free.
+- **Ticket files.** `flux export` writes the layout the specification
+  describes: markdown tickets with front matter, an index, and one
+  evidence file per checkpoint.
+- **Import.** `flux import` reads a CSV backlog, mapping the file column
+  onto scope so overlapping work is detectable. Rows whose id is already
+  used by a different ticket are reported as conflicts rather than
+  dropped.
+- **Commands.** `flux list`, `flux show`, `flux version`, `flux renew`,
+  `flux reconcile`, `flux art` and `flux import`.
+- **Ticket model.** The full schema from the specification: title,
+  priority, tags, dependencies, blocks, owner, seed key and updated time.
+- **Migrations.** A `meta` table records the schema version, and
+  migrations are additive and idempotent.
+- **Property tests.** For the token rules, the token budget, the
+  stagnation rule, the byte budget and scope conflicts.
+- **Coverage.** CI measures the package, including the commands that run
+  as subprocesses.
+
+### Fixed
+
+- The documented interface now exists: `flux task-add --budget` and
+  `flux decide <id> <decision>` are accepted, and the acceptance gate
+  records the move to `DONE`.
+- A ticket id could walk out of the project directory when exported.
+  Ids are now plain identifiers, and every exported path is checked.
+- A client could name its own scopes at login. Scopes are granted by the
+  credential verifier instead.
+- A refreshed token lost its scopes, and extra claims could override the
+  standard ones.
+- The status vocabulary matches the specification: the working station is
+  `in_progress`, and older ledgers are migrated in place.
+- Usage errors are JSON, like every other error the CLI produces.
+- The context packet is sized incrementally instead of being re-encoded
+  for every candidate.
+- Failures must name a category from the documented taxonomy.
+- The GitHub response limit, the dashboard credential rule and
+  `FLUX_GITHUB_DB` now exist as the security policy says they do.
+- The blank ticket template and the rendered ticket can no longer drift.
+
+### Changed
+
+- The wordmark replaces the previous block lettering, and the README
+  banner matches it.
+- `mypy --strict` and `ruff` pass across the package; the type check step
+  in CI had been failing since the first commit.
+
+## [0.1.0] — 2026-10-21
+
+The first release: a SQLite ledger with leases, checkpoints, contexts and
+profiles, a JSON-first CLI, and the ticket specification.
+
+[0.2.0]: https://github.com/hamanakam1/fluxrecord/releases/tag/v0.2.0
+[0.1.0]: https://github.com/hamanakam1/fluxrecord/releases/tag/v0.1.0

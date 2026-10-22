@@ -368,6 +368,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE)
