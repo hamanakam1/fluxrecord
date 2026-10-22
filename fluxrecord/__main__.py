@@ -19,8 +19,13 @@ def parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("init")
+    init = sub.add_parser("init", help="create the ledger and the project layout")
+    init.add_argument("--project", default=".fluxrecord", help="project directory for ticket files")
+
     sub.add_parser("status")
+
+    exp = sub.add_parser("export", help="write tickets to the project directory")
+    exp.add_argument("--project", default=".fluxrecord")
 
     art = sub.add_parser("art", help="print the fluxrecord wordmark")
     art.add_argument(
@@ -193,10 +198,35 @@ def main() -> None:
 
         if a.command == "init":
             from .ascii_art import get_art
+            from .core import Ledger
+            from .files import scaffold
 
-            payload = {"schema": 1, "status": "ready", "dispatch_enabled": False}
+            layout = scaffold(a.project)
+            ledger = Ledger(a.db)
+            try:
+                schema = ledger.schema_version()
+            finally:
+                ledger.close()
+            payload = {
+                "schema": schema,
+                "status": "ready",
+                "dispatch_enabled": False,
+                "ledger": str(a.db),
+                "project": layout,
+            }
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             print(get_art("small", color=sys.stderr.isatty()), file=sys.stderr)
+            return
+
+        if a.command == "export":
+            from .core import Ledger
+            from .files import export
+
+            ledger = Ledger(a.db)
+            try:
+                print(json.dumps(export(ledger, a.project), indent=2, ensure_ascii=False))
+            finally:
+                ledger.close()
             return
 
         ledger = Ledger(a.db)

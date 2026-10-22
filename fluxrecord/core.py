@@ -566,6 +566,34 @@ class Ledger:
             "execution_authorized": False,
         }
 
+    def evidence(self, task_id: str) -> dict[str, Any]:
+        """Everything recorded about a task: checkpoints, events and failures."""
+        checkpoints = [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT c.id,c.session_id,c.summary,c.evidence,c.next_step,c.tokens,c.created,"
+                "s.owner FROM checkpoints c JOIN sessions s ON s.id=c.session_id"
+                " WHERE s.task_id=? ORDER BY c.id",
+                (task_id,),
+            )
+        ]
+        events = [
+            dict(row) | {"data": json.loads(row["data"])}
+            for row in self.db.execute(
+                "SELECT * FROM events WHERE task_id=? ORDER BY seq",
+                (task_id,),
+            )
+        ]
+        failures = [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT category,fingerprint,summary,created FROM failures"
+                " WHERE task_id=? ORDER BY id",
+                (task_id,),
+            )
+        ]
+        return {"checkpoints": checkpoints, "events": events, "failures": failures}
+
     def status(self) -> dict[str, Any]:
         self.reconcile()
         return {
