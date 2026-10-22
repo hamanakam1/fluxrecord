@@ -1,29 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://fluxrecord.dev/wire-format/1",
-  "title": "fluxrecord wire format",
-  "description": "The JSON shapes other tools may rely on. Version 1 is frozen: changing a field name, or adding one to a frozen shape, is a breaking change.",
+  "$id": "https://fluxrecord.dev/schema/wire-format-v1.json",
+  "title": "fluxrecord wire format, version 1",
+  "description": "The shapes fluxrecord reads and writes. A third-party implementation that produces and consumes these shapes interoperates with fluxrecord. Adding a field is a minor version; removing one, renaming one, or changing its type is a major version.",
   "x-wire-format": 1,
   "$defs": {
     "ticket": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
-        "id",
-        "objective",
         "acceptance",
-        "kind",
-        "scope",
-        "status",
-        "token_budget",
-        "created",
-        "title",
-        "priority",
-        "tags",
-        "depends_on",
         "blocks",
+        "created",
+        "depends_on",
+        "id",
+        "kind",
+        "objective",
         "owner",
+        "priority",
+        "scope",
         "seed_key",
+        "status",
+        "tags",
+        "title",
+        "token_budget",
         "updated_at"
       ],
       "properties": {
@@ -37,7 +36,14 @@
           "type": "string"
         },
         "kind": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "code",
+            "fix",
+            "closure",
+            "planning",
+            "product"
+          ]
         },
         "scope": {
           "type": "array",
@@ -46,7 +52,15 @@
           }
         },
         "status": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "ready",
+            "in_progress",
+            "blocked",
+            "review",
+            "done",
+            "cancelled"
+          ]
         },
         "token_budget": {
           "type": "integer"
@@ -87,28 +101,120 @@
         "updated_at": {
           "type": "number"
         }
-      }
+      },
+      "additionalProperties": false
+    },
+    "ticket_file": {
+      "type": "object",
+      "required": [
+        "blocks",
+        "created_at",
+        "depends_on",
+        "id",
+        "kind",
+        "owner",
+        "priority",
+        "scope",
+        "seed_key",
+        "status",
+        "tags",
+        "title",
+        "token_budget",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "in_progress",
+            "blocked",
+            "review",
+            "done",
+            "cancelled"
+          ]
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "code",
+            "fix",
+            "closure",
+            "planning",
+            "product"
+          ]
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "token_budget": {
+          "type": "integer"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owner": {
+          "type": "string"
+        },
+        "seed_key": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
     },
     "packet": {
       "type": "object",
       "required": [
+        "acceptance",
+        "context",
+        "dependencies",
+        "depends_on",
+        "failures",
+        "kind",
+        "objective",
+        "owner",
+        "priority",
+        "scope",
+        "scope_conflicts",
+        "status",
+        "tags",
         "task_id",
         "title",
-        "objective",
-        "acceptance",
-        "kind",
-        "scope",
-        "status",
-        "priority",
-        "tags",
-        "depends_on",
-        "owner",
         "token_budget",
-        "failures",
-        "dependencies",
-        "scope_conflicts",
-        "trust",
-        "context"
+        "trust"
       ],
       "properties": {
         "task_id": {
@@ -193,10 +299,10 @@
       "type": "object",
       "required": [
         "id",
-        "task_id",
+        "lease_until",
         "owner",
         "status",
-        "lease_until",
+        "task_id",
         "tokens"
       ],
       "properties": {
@@ -238,15 +344,15 @@
     "board_row": {
       "type": "object",
       "required": [
-        "id",
-        "title",
-        "status",
-        "priority",
-        "owner",
         "age_seconds",
-        "tokens",
+        "failures",
+        "id",
         "last_evidence",
-        "failures"
+        "owner",
+        "priority",
+        "status",
+        "title",
+        "tokens"
       ],
       "properties": {
         "id": {
@@ -273,14 +379,14 @@
         "last_evidence": {
           "type": "string"
         },
-        "failures": {
-          "type": "integer"
-        },
         "last_evidence_at": {
           "type": [
             "number",
             "null"
           ]
+        },
+        "failures": {
+          "type": "integer"
         },
         "lease_remaining": {
           "type": [

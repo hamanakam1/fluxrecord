@@ -293,12 +293,17 @@ world is to reach 1.0 by renaming things and calling it a day.
 
 **Exit criteria**
 
-- [ ] `fluxrecord-conformance` exists and passes against the reference
-      implementation.
-- [ ] The wire format has a JSON Schema and a version number, and the CLI
-      reports which version it speaks.
-- [ ] The marker rename ships with a dual-read window and a migration note.
-- [ ] The breaking-change policy is published and has been followed at least
+- [x] `fluxrecord-conformance` exists and passes against the reference
+      implementation. (In-repo for now: `tests/test_conformance.py` runs the
+      published shapes against the real CLI, and a separate package can run
+      the same checks against another implementation.)
+- [x] The wire format has a JSON Schema and a version number, and the CLI
+      reports which version it speaks. The schema is *generated* from the
+      code's shapes by `scripts/publish_schema.py` and checked against the
+      real output with a real JSON Schema validator, so the artefact other
+      people read cannot quietly describe the previous release.
+- [x] The marker rename ships with a dual-read window and a migration note.
+- [x] The breaking-change policy is published and has been followed at least
       once.
 
 **Cut:** no plugin marketplace, no hosted API, no web anything. A standard
@@ -593,11 +598,16 @@ planning.
    *Recommendation:* 3.11–3.13, with 3.14 added to CI once it is the local
    default. The support range in `pyproject.toml` should match CI exactly.
 
-6. **Should the ticket file format or the JSON wire format be the frozen
-   contract?**
-   *Recommendation:* the file format. It is what a human reviews, it is
-   already diffable, and it is the thing a third party would read. The JSON
-   shapes follow the files.
+6. ~~**Should the ticket file format or the JSON wire format be the frozen
+   contract?**~~
+   **Settled: the ticket file format, with the wire format alongside
+   it.** The file is what a human reviews, it is already diffable, and it
+   is the thing a third party would read. Its front matter is now a frozen
+   shape of its own (`ticket_file`), validated against the real exported
+   file, with its times as strings where the ledger keeps them as numbers
+   — the file is a document, not a record. The JSON wire format is frozen
+   alongside it, published as a generated JSON Schema, so the two cannot
+   drift apart.
 
 ---
 

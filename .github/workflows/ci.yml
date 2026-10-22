@@ -41,6 +41,9 @@ jobs:
       - name: Chain check
         run: python3 -m unittest tests.test_chain -v
 
+      - name: Published schema check
+        run: python3 -m unittest tests.test_published_schema -v
+
       - name: Report coverage
         run: |
           python -c "import pathlib, site; pathlib.Path(site.getsitepackages()[0], 'coverage.pth').write_text('import coverage; coverage.process_startup()')"

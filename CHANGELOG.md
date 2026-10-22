@@ -39,6 +39,23 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   is null sometimes is fine; one that is null always is a promise the tool
   cannot keep. `token_count` and `quality_estimate` are gone with it — they
   could never carry a value.
+- **The published schema is checked against the real output.**
+  `docs/wire-format.schema.json` is the artefact a third-party
+  implementation reads, and it was published but never used to check
+  anything. It is now validated, with a real JSON Schema validator, against
+  the output of the real CLI in every state a ticket can be in — and the
+  check is that the schema *rejects* a field the standard does not define,
+  so a schema that accepts everything fails too.
+- **The published schema is generated, so it cannot drift.**
+  `scripts/publish_schema.py` writes it from the code's shapes, and a test
+  fails when the file on disk is not what the generator would write. The
+  shapes also carry their closed vocabularies now: `status` and `kind` are
+  enums in the published schema rather than plain strings, so a
+  third-party implementation can tell what the values are.
+- **The exported ticket file is a frozen shape of its own.** Its front
+  matter is validated against `ticket_file`, and its times are strings
+  there, where the ledger keeps them as numbers: the file is a document,
+  not a record.
 - **The event chain is reachable, and tested.** Every ledger the CLI opens
   is now chained when `FLUX_EVENT_KEY` is set, so the chain is no longer a
   capability that exists only inside the library. `tests/test_chain.py`
