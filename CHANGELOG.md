@@ -19,11 +19,20 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   through a headless browser. The images are never hand-edited, and the
   script redacts the machine's home directory and any temporary build path
   before it renders anything.
+- **The boundary is checked.** `tests/test_boundaries.py` reads the source
+  with `ast` and refuses the core ledger any import that can reach the
+  network or start a process, any import of an adapter, any dynamic import
+  or `exec`, and any write to stdout. It also asserts that the package
+  declares no runtime dependencies. The check has its own tests, so a gate
+  that cannot fail is caught before it starts passing everything, and it
+  runs as a named step in CI.
 
 ### Changed
 
 - The README now shows the ticket lifecycle and a gallery of the commands,
   and points at `PLAN.md` for the long-term view.
+- `CONTRIBUTING.md` explains the boundary check and what to do when a change
+  needs a module the core may not import.
 
 ## [0.2.0] — 2026-10-22
 

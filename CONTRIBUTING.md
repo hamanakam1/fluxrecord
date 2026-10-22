@@ -77,6 +77,19 @@ and real ticket data out of the rendered output.
 - **No telemetry** in core or read commands
 - **Synthetic fixtures only** in tests
 
+### The boundary is checked
+
+`tests/test_boundaries.py` reads the source with `ast` and refuses the core
+ledger any import that can reach the network or start a process, any import
+of an adapter, any dynamic import or `exec`, and any write to stdout. It
+runs as a named step in CI.
+
+If you need to add a module to the core, edit `CORE_ALLOWED` in that test
+and write the reason next to it — the default is no, and the change is
+visible in the diff. If you need the core to reach outside, that is a
+change to the architecture, and it belongs in an ADR before it belongs in
+an import statement.
+
 ---
 
 ## Architecture Decisions

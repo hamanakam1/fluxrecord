@@ -355,6 +355,7 @@ checkable by a machine, because a gate that needs judgement gets skipped.
 | Visual regression | UI tabs | Playwright | only where a UI exists |
 | Types | strict | `mypy --strict` | blocks the merge |
 | Style | — | `ruff check` + `ruff format --check` | blocks the merge |
+| Boundary | — | `ast` import-graph check | blocks the merge |
 | Documentation | — | a test that every command appears in the README | blocks the merge |
 
 The property-based tests are the interesting ones, because they cover the
@@ -427,11 +428,15 @@ network calls — which is a security property, not a limitation.
 | The tool inventory never executes anything | `tools.py` | It only stats the filesystem |
 | No credential in the repository or in a fixture | everywhere | A secret scan in CI |
 
-The one invariant that is currently stated but not mechanically enforced is
-the first one. "The core opens no socket" is a promise about the future as
-much as the past, and a promise that is not checked is a promise that decays.
-**A CI check that greps the core's import graph is the cheapest and highest
-value gate in this document.**
+The one invariant that was stated but not mechanically enforced — "the core
+opens no socket and runs no subprocess" — is now **checked**:
+`tests/test_boundaries.py` builds the core's import graph from the source
+with `ast`, walks the closure, and refuses a network or process module, an
+adapter import, a dynamic import or an `exec`, and a write to stdout. The
+check has its own tests, so a gate that cannot fail is caught before it
+starts passing everything. It is a named step in CI, and the default is
+"no": allowing a new module in the core means editing an allowlist in that
+test, where the reason has to be written next to it.
 
 ### Disclosure
 
@@ -578,6 +583,9 @@ planning.
 
 Not a backlog. A starting point, in the order they should be taken.
 
+**Done:** the third one. `tests/test_boundaries.py` checks the core's
+import graph, and CI runs it as a named step.
+
 1. **Settle the status vocabulary.**
    Objective: `SPEC.md` and `core.py` agree on every status name, and the
    acceptance gate has a terminal state. Acceptance: a test reads the
@@ -591,12 +599,13 @@ Not a backlog. A starting point, in the order they should be taken.
    metrics section either computes cash cost from the profiles or is removed.
    Scope: `repo/core`. Budget: 2000 tokens.
 
-3. **Enforce the core's boundary in CI.**
+3. ~~**Enforce the core's boundary in CI.**~~
    Objective: "the core opens no socket and runs no subprocess" is checked,
    not promised. Acceptance: a CI job fails if `fluxrecord/core.py` gains an
    import of `socket`, `subprocess`, `http`, `urllib` or `os.system`; the
    job is red when the import is added deliberately.
    Scope: `repo/core`, `repo/ci`. Budget: 2000 tokens.
+   **Shipped** in `tests/test_boundaries.py`, with a named CI step.
 
 ---
 
