@@ -65,6 +65,33 @@ class ListTest(unittest.TestCase):
         self.assertEqual(len(self.ledger.list_tasks(limit=1)), 1)
 
 
+class ShowTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.path = Path(self.temp.name) / "ledger.sqlite"
+        self.ledger = Ledger(self.path)
+        self.ledger.add_task("M-1", "Fix search", "Regression passes", scope=["repo/search"])
+
+    def tearDown(self):
+        self.ledger.close()
+        self.temp.cleanup()
+
+    def test_show_gathers_everything_about_a_ticket(self):
+        started = self.ledger.start("M-1", "terminal-1")
+        self.ledger.checkpoint(started["session_id"], "s", "e", "n", 10)
+        self.ledger.fail(started["session_id"], "tool", "Compiler missing")
+        view = self.ledger.show("M-1")
+        self.assertEqual(view["ticket"]["id"], "M-1")
+        self.assertEqual(len(view["sessions"]), 1)
+        self.assertEqual(len(view["checkpoints"]), 1)
+        self.assertEqual(len(view["failures"]), 1)
+        self.assertTrue(view["events"])
+
+    def test_show_refuses_an_unknown_ticket(self):
+        with self.assertRaises(ValueError):
+            self.ledger.show("M-999")
+
+
 class PacketTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

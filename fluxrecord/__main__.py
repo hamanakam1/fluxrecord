@@ -35,6 +35,9 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("version", help="print the package version")
 
+    show = sub.add_parser("show", help="show one ticket and everything recorded about it")
+    show.add_argument("task")
+
     exp = sub.add_parser("export", help="write tickets to the project directory")
     exp.add_argument("--project", default=".fluxrecord")
 
@@ -285,6 +288,8 @@ def main() -> None:
 
         if cmd == "status":
             result = ledger.status()
+        elif cmd == "show":
+            result = ledger.show(a.task)
         elif cmd == "list":
             tickets = ledger.list_tasks(
                 a.status,

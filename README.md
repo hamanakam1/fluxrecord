@@ -90,6 +90,7 @@ INBOX → READY → IN_PROGRESS ↔ BLOCKED → REVIEW → ACCEPTED → DONE
 | `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
 | `flux status` | Ledger state, metrics and failure history |
 | `flux list [--status S] [--priority N] [--tag T] [--scope S] [--owner O]` | List tickets with filters |
+| `flux show <id>` | One ticket with its sessions, checkpoints, failures and events |
 | `flux events [--after N]` | The event log, as JSON |
 | `flux pack <id> [--max-bytes N] [--packet-only]` | Bounded context packet for a ticket |
 | `flux context-add <id> --file F --source S` | Attach context to a ticket |
@@ -198,6 +199,34 @@ The repository's own `tickets.csv` is the worked example — 98 rows that
 reuse 31 ids. A reused id is reported as a conflict rather than silently
 dropped; `--reassign` gives those rows a fresh sequential id instead and
 reports the old and new id for each.
+
+---
+
+## GitHub Sync
+
+`flux github-poll` observes a repository and writes what it saw into a
+durable store: every revision of every issue, comment, pull, review
+comment, release, run, commit and event, each implying one of six actions.
+The `gh` CLI is the only way out — no token is read or stored anywhere, and
+every call is bounded by a 30 second timeout.
+
+Writing is idempotent. A queued comment carries a
+`<!-- taskrivet:{key}:{digest} -->` marker, and `publish` matches that
+marker before sending anything, so a retry confirms instead of
+double-posting.
+
+```bash
+flux github-poll --repo owner/repo
+flux github-status --repo owner/repo
+flux github-publish --repo owner/repo --issue 123 --key summary --body "..."
+flux github-reconcile --repo owner/repo
+flux github-cycle --config templates/github-cycle.json
+```
+
+A cycle is described by a JSON file — see
+[`templates/github-cycle.json`](templates/github-cycle.json). Nothing is
+published unless the config asks for it, and a repository that fails is
+recorded and skipped rather than stopping the cycle.
 
 ---
 

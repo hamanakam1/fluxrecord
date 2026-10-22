@@ -642,6 +642,17 @@ class Ledger:
             found = [task for task in found if scope in (task.get("scope") or [])]
         return found[:limit]
 
+    def show(self, task_id: str) -> dict[str, Any]:
+        """One ticket with everything recorded about it."""
+        sessions = [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT * FROM sessions WHERE task_id=? ORDER BY created",
+                (task_id,),
+            )
+        ]
+        return {"ticket": self.task_view(task_id), "sessions": sessions, **self.evidence(task_id)}
+
     def evidence(self, task_id: str) -> dict[str, Any]:
         """Everything recorded about a task: checkpoints, events and failures."""
         checkpoints = [

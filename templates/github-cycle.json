@@ -1,0 +1,11 @@
+{
+  "repos": [
+    {
+      "repo": "owner/repo",
+      "max_pages": 5
+    }
+  ],
+  "kinds": ["issues", "comments", "pulls", "runs"],
+  "sync_db": "~/.fluxrecord/github.sqlite",
+  "publish": false
+}
