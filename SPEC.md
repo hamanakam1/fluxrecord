@@ -360,6 +360,11 @@ comes from `FLUX_EVENT_KEY`, or from a file `FLUX_EVENT_KEY_FILE` names.
 A ledger nobody signed is still a ledger, and `flux verify` says it cannot
 be checked rather than implying that it was.
 
+The event log grows, so it is compacted: `flux compact --keep N` folds the
+oldest events into a summary and prunes them. The digest of the last
+pruned event is kept as the base the remaining events chain onto, so the
+chain still verifies over what is left.
+
 ### What the chain proves, and what it does not
 
 A chain is a prefix, so it proves the log from its first event up to the

@@ -328,7 +328,9 @@ class Ledger:
                 "broken_at": None,
                 "note": "The ledger is not signed, so the log cannot be checked.",
             }
-        previous = ""
+        # A compaction leaves the digest of the last pruned event behind,
+        # and the chain continues from there.
+        previous = self._chain_base()
         for index, event in enumerate(events):
             expected = self._digest(
                 str(event["type"]),
@@ -367,6 +369,11 @@ class Ledger:
             "head": str(events[-1]["digest"]) if events else "",
             "note": self._head_note(events),
         }
+
+    def _chain_base(self) -> str:
+        """The digest the chain starts from, after a compaction."""
+        row = self.db.execute("SELECT value FROM meta WHERE key='chain_base'").fetchone()
+        return str(row["value"]) if row is not None else ""
 
     def _recorded_head(self) -> str:
         """The head of the chain, as recorded when the last event was
@@ -1190,6 +1197,79 @@ class Ledger:
                 }
             )
         return board
+
+    def compact(self, keep: int = 100) -> dict[str, Any]:
+        """Fold the oldest events into a summary and prune them.
+
+        The event log is the ledger's memory, and memory grows. Compaction
+        keeps the most recent events and folds the rest into a summary,
+        with the digest of the last pruned event recorded so the chain
+        still verifies over what is left.
+        """
+        if keep < 1:
+            raise ValueError("keep must be at least 1")
+        total = int(self.db.execute("SELECT COUNT(*) AS n FROM events").fetchone()["n"])
+        if total <= keep:
+            return {
+                "pruned": 0,
+                "kept": total,
+                "total": total,
+                "note": "Nothing to compact: the log is already short enough.",
+            }
+        boundary = self.db.execute(
+            "SELECT seq, digest FROM events ORDER BY seq DESC LIMIT 1 OFFSET ?",
+            (keep,),
+        ).fetchone()
+        first = self.db.execute("SELECT seq FROM events ORDER BY seq LIMIT 1").fetchone()
+        newest_pruned = int(boundary["seq"])
+        first_seq = int(first["seq"])
+        kinds = {
+            str(row["type"]): int(row["n"])
+            for row in self.db.execute(
+                "SELECT type, COUNT(*) AS n FROM events WHERE seq<=? GROUP BY type",
+                (newest_pruned,),
+            )
+        }
+        summary = {
+            "events": newest_pruned - first_seq + 1,
+            "from": first_seq,
+            "to": newest_pruned,
+            "at": time.time(),
+            "kinds": kinds,
+        }
+        with self.transaction():
+            self.db.execute(
+                "INSERT INTO meta(key,value) VALUES('compacted',?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (json.dumps(summary, sort_keys=True),),
+            )
+            if boundary["digest"]:
+                # The chain continues from here: the digest of the last
+                # pruned event is the base the kept events chain onto.
+                self.db.execute(
+                    "INSERT INTO meta(key,value) VALUES('chain_base',?)"
+                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (str(boundary["digest"]),),
+                )
+            self.db.execute("DELETE FROM events WHERE seq<=?", (newest_pruned,))
+        return {
+            "pruned": summary["events"],
+            "kept": keep,
+            "total": total,
+            "summary": summary,
+            "note": "The chain still verifies: it starts from the digest of the last pruned event.",
+        }
+
+    def compaction_summary(self) -> dict[str, Any]:
+        """What the last compaction folded away."""
+        row = self.db.execute("SELECT value FROM meta WHERE key='compacted'").fetchone()
+        if row is None:
+            return {}
+        try:
+            found = json.loads(str(row["value"]))
+        except json.JSONDecodeError:
+            return {}
+        return found if isinstance(found, dict) else {}
 
     def sessions(self, active_only: bool = False) -> list[dict[str, Any]]:
         """The sessions in the ledger, with what each one is holding.

@@ -73,6 +73,9 @@ def parser() -> argparse.ArgumentParser:
     look.add_argument("--issuer", default="")
     look.add_argument("--audience", default="")
 
+    cmp = sub.add_parser("compact", help="fold the oldest events into a summary")
+    cmp.add_argument("--keep", type=int, default=100, help="how many recent events to keep")
+
     ver = sub.add_parser("verify", help="check that the event log has not been edited")
     ver.add_argument("--signed", action="store_true", help="fail when the ledger is not signed")
 
@@ -424,6 +427,13 @@ def main() -> None:
                     ensure_ascii=False,
                 )
             )
+            return
+
+        if a.command == "compact":
+            from .core import Ledger
+
+            with Ledger(a.db, tokenizer=tokenizer) as book:
+                print(json.dumps(book.compact(a.keep), indent=2, ensure_ascii=False))
             return
 
         if a.command == "verify":
