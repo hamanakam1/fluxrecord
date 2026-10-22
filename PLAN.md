@@ -13,6 +13,20 @@ or a decision that still has to be made.
 lifecycle the software enforces on itself — a claim in here is a ticket, a
 ticket is bounded context, and a plan nobody accepted is just prose.
 
+**Where the plan stands:** phases 1 to 5 are built, and every exit
+criterion in them is met. What is left is phase 6, which is a set of
+directions rather than commitments. The gates that hold the work together
+are named in §5, and each one is a command in CI:
+
+| Gate | What it refuses |
+|---|---|
+| `tests/test_boundaries.py` | The core importing anything that can reach the network or start a process, an adapter, a dynamic import, or writing to stdout |
+| `tests/test_spec_conformance.py` | The published standard and the code disagreeing about a status, a transition, a failure category, a field or a command |
+| `tests/test_no_null_keys.py` | A key in any report being null in every case it appears in |
+| `tests/test_chain.py` | The event chain failing to notice an edit, a deletion, an insertion or a truncation |
+| `tests/test_published_schema.py` | The published schema describing the previous release instead of this one |
+| `conformance/run.py` | An implementation that does not produce the standard's shapes |
+
 ---
 
 ## 1. What is being built
@@ -125,12 +139,18 @@ project makes in public:
 
 **Exit criteria**
 
-- [ ] One status vocabulary, asserted by a test that reads the specification
+- [x] One status vocabulary, asserted by a test that reads the specification
       and the code and fails when they diverge.
-- [ ] Every key in every JSON output is either populated or removed.
-- [ ] `flux status --summary` (or a `flux board`) renders a compact table:
+- [x] Every key in every JSON output is either populated or removed.
+- [x] `flux status --summary` (or a `flux board`) renders a compact table:
       one line per ticket, with status, owner, age, tokens and last evidence.
-- [ ] A `SPEC.md` conformance test exists and runs in CI.
+- [x] A `SPEC.md` conformance test exists and runs in CI.
+
+**Shipped.** The vocabulary is settled (`INBOX` is gone; accepted work is
+stored as `done`), `tests/test_no_null_keys.py` refuses a key that is null
+in every report, `flux status --summary` is the board, and
+`tests/test_spec_conformance.py` reads the specification and compares it
+with the code in both directions.
 
 **Cut:** no new adapters in this phase. The GitHub cycle, the dashboard
 preview and the auth routes are all feature-complete enough; the problem this
@@ -165,14 +185,20 @@ different from the one you sent last time.
 
 **Exit criteria**
 
-- [ ] `flux pack` reports a packet hash, and re-packing an unchanged ticket
+- [x] `flux pack` reports a packet hash, and re-packing an unchanged ticket
       yields the same hash.
-- [ ] `flux pack --since` returns a delta and says so when there is none.
-- [ ] A reproducible benchmark exists: the bytes (and tokens, when a
+- [x] `flux pack --since` returns a delta and says so when there is none.
+- [x] A reproducible benchmark exists: the bytes (and tokens, when a
       tokenizer is present) a worker spends on a ticket today versus the
       bytes it would spend re-reading the repository. The number goes in the
       README, because an unmeasured claim is a marketing claim.
-- [ ] The tokenizer plug-in degrades cleanly when no tokenizer is installed.
+- [x] The tokenizer plug-in degrades cleanly when no tokenizer is installed.
+
+**Shipped.** Every packet is addressed by the hash of its content, a delta
+says what changed since a packet was last sent, `flux benchmark` puts the
+number in the README — 0.7% of the file it replaces — and the tokenizer is
+injected rather than imported, so the core stays stdlib-only and a token
+count appears only when one has been registered.
 
 **Cut:** no model gateway, no prompt assembly library, no inference of any
 kind. fluxrecord does not call models. That is what makes it usable as the
@@ -211,12 +237,19 @@ overwriting each other. It stops at the edge of one ledger file.
 
 **Exit criteria**
 
-- [ ] Two processes contending for the same scope: exactly one wins, and the
+- [x] Two processes contending for the same scope: exactly one wins, and the
       loser is told which ticket holds the reservation and until when.
-- [ ] A lease can be handed over deliberately and adopted after a crash, and
+- [x] A lease can be handed over deliberately and adopted after a crash, and
       both are recorded in the event log.
-- [ ] `flux watch` shows a ticket moving, with no server process.
-- [ ] The shared-ledger question has a written answer and a test.
+- [x] `flux watch` shows a ticket moving, with no server process.
+- [x] The shared-ledger question has a written answer and a test.
+
+**Shipped.** `flux handoff` and `flux adopt` change the owner deliberately
+and record the reason, `flux watch` tails the event log with no socket and
+no server, and the specification answers the shared-ledger question: one
+ledger on a shared volume, one writer at a time, and never over a network
+filesystem, because WAL needs shared memory that NFS and SMB do not give.
+The WebSocket item is gone from the roadmap.
 
 **Cut:** no web dashboard, no hosted service, no multi-tenant anything.
 
@@ -617,14 +650,20 @@ planning.
 
 ## Appendix A — Phase summary
 
-| Phase | Version | Goal | Exit criteria in one line |
-|---|---|---|---|
-| 1 | 0.2 → 0.3 | One truth | The spec and the code agree, and every key is real |
-| 2 | 0.3 → 0.4 | Context economics | The saving is measured and reported |
-| 3 | 0.4 → 0.5 | Coordination | Two workers contend, one wins, both know why |
-| 4 | 0.5 → 0.6 | Identity and tamper-evidence | The threat model is written and the log can detect an edit |
-| 5 | 0.6 → 1.0 | The standard | A third-party implementation passes the conformance suite |
-| 6 | 1.0 → | Directions | Federation, renderers, and a server only if earned |
+| Phase | Version | Goal | Exit criteria in one line | State |
+|---|---|---|---|---|
+| 1 | 0.2 → 0.3 | One truth | The spec and the code agree, and every key is real | **shipped** |
+| 2 | 0.3 → 0.4 | Context economics | The saving is measured and reported | **shipped** |
+| 3 | 0.4 → 0.5 | Coordination | Two workers contend, one wins, both know why | **shipped** |
+| 4 | 0.5 → 0.6 | Identity and tamper-evidence | The threat model is written and the log can detect an edit | **shipped** |
+| 5 | 0.6 → 1.0 | The standard | A third-party implementation passes the conformance suite | **shipped** |
+| 6 | 1.0 → | Directions | Federation, renderers, and a server only if earned | not started |
+
+"Shipped" means the exit criteria above are met and the gate that holds
+each one is in CI. It does not mean the version numbers have been cut:
+releasing 1.0 is a decision about the package, and the phase names here
+are the order the work was done in, not a promise about the version
+numbers.
 
 ## Appendix B — The first three tickets
 
