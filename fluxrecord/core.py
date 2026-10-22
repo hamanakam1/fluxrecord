@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import time
 import uuid
@@ -38,6 +39,10 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
 )
 
 _JSON_COLUMNS = ("scope", "tags", "depends_on", "blocks")
+
+#: A ticket id becomes a file name when a ticket is exported, so it is
+#: restricted to characters that cannot walk out of a directory.
+_TASK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 #: The failure taxonomy from SPEC.md. A failure outside it is a typo, not a
 #: new category, so it is refused rather than recorded.
@@ -201,6 +206,10 @@ class Ledger:
             (kind, "kind"),
         ]:
             required(value, name)
+        if not _TASK_ID.fullmatch(task_id) or task_id in (".", ".."):
+            raise ValueError(
+                "id must be a plain identifier such as M-397001; it cannot contain path separators"
+            )
         positive(token_budget, "token_budget")
         if type(priority) is not int or priority not in (1, 2, 3):
             raise ValueError("priority must be 1, 2, or 3")

@@ -98,6 +98,22 @@ class FilesTest(unittest.TestCase):
         for heading in headings:
             self.assertIn(heading, rendered, heading)
 
+    def test_a_ticket_id_cannot_walk_out_of_the_project(self):
+        with self.assertRaises(ValueError):
+            self.ledger.add_task("../../escape", "Objective", "Acceptance", scope=["repo/x"])
+
+    def test_a_ticket_id_cannot_be_a_path(self):
+        for bad in ("../escape", "a/b", "a\\b", ".", "..", "with space"):
+            with self.assertRaises(ValueError):
+                self.ledger.add_task(bad, "Objective", "Acceptance", scope=["repo/x"])
+
+    def test_export_refuses_to_write_outside_the_project(self):
+        self.ledger.add_task("M-1", "Objective", "Acceptance", scope=["repo/x"])
+        self.ledger.db.execute("UPDATE tasks SET id='../../escape' WHERE id='M-1'")
+        with self.assertRaises(ValueError):
+            export(self.ledger, self.project)
+        self.assertFalse(list(self.project.parent.glob("escape.md")))
+
     def test_a_ticket_without_evidence_still_renders(self):
         rendered = render_ticket(
             {

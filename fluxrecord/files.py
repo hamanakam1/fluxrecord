@@ -48,6 +48,15 @@ TICKET_FIELDS = (
 _LIST_FIELDS = ("scope", "tags", "depends_on", "blocks")
 
 
+def _inside(directory: Path, name: str) -> Path:
+    """Resolve a name inside a directory, refusing anything that escapes it."""
+    candidate = (directory / name).resolve()
+    base = directory.resolve()
+    if candidate != base and base not in candidate.parents:
+        raise ValueError(f"refusing to write outside {base}: {name}")
+    return candidate
+
+
 def _stamp(value: Any) -> str:
     if not isinstance(value, (int, float)) or value <= 0:
         return ""
@@ -164,11 +173,11 @@ def export(ledger: Any, project_dir: str | Path) -> dict[str, Any]:
     for task in tasks:
         task_id = str(task["id"])
         evidence = ledger.evidence(task_id)
-        ticket_path = root / "tickets" / f"{task_id}.md"
+        ticket_path = _inside(root / "tickets", f"{task_id}.md")
         ticket_path.write_text(render_ticket(task, evidence))
         written.append(str(ticket_path))
 
-        folder = root / "evidence" / task_id
+        folder = _inside(root / "evidence", task_id)
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         for number, checkpoint in enumerate(evidence["checkpoints"], 1):
             payload = {
