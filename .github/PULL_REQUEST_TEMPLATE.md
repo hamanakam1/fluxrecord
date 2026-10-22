@@ -1,60 +1,36 @@
+# Pull Request Template
+
 ## Description
-Brief description of what this PR does.
+<!-- Provide a clear description of what this PR does -->
 
 ## Type of Change
-- [ ] Bug fix (non-breaking change fixing an issue)
-- [ ] New feature (non-breaking change adding functionality)
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
 - [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
 - [ ] Documentation update
 - [ ] Refactoring (no functional changes)
 - [ ] Performance improvement
-- [ ] Test addition/improvement
-- [ ] CI/CD improvement
-- [ ] Dependency update
+- [ ] Test updates
 
 ## Related Issues
-Fixes # (issue number)
-Related to # (issue number)
-
-## Changes Made
-- Change 1
-- Change 2
-- Change 3
+<!-- Link to related issues: Fixes #123, Closes #456 -->
 
 ## Testing
-- [ ] All existing tests pass (`python3 -m unittest discover -s tests -v`)
-- [ ] Added new tests for the changes
-- [ ] Manual testing performed (describe below)
-- [ ] Type checking passes (`mypy fluxrecord/`)
-- [ ] Linting passes (`ruff check fluxrecord/`)
-- [ ] Format check passes (`ruff format --check fluxrecord/`)
+- [ ] Backend tests pass (`python -m pytest`)
+- [ ] Extension tests pass (`node --test tests/*.mjs`)
+- [ ] Tested in Chrome/Edge
+- [ ] Tested in Firefox (if applicable)
+- [ ] Manual testing completed
 
-## Testing Details
-Describe how you tested this change:
-- Unit tests added/modified:
-- Integration tests added/modified:
-- Manual testing steps:
-- Edge cases considered:
-
-## Breaking Changes
-If this is a breaking change, describe:
-- What breaks
-- Migration path for users
-- Deprecation timeline (if applicable)
+## Privacy & Security
+- [ ] No secrets or credentials committed
+- [ ] Follows consent-first principles
+- [ ] Respects privacy model (local-first, opt-in)
+- [ ] Redaction applied where needed
 
 ## Checklist
-- [ ] Code follows the project's style guidelines
+- [ ] Code follows project style guidelines
 - [ ] Self-review completed
 - [ ] Comments added for complex logic
-- [ ] Documentation updated (README, SPEC.md, docstrings)
-- [ ] CHANGELOG.md updated (or will be updated in release)
-- [ ] No new warnings from linter/type checker
-- [ ] Tests added for new functionality
-- [ ] All CI checks pass locally
-
-## Additional Context
-Any additional context, screenshots, or references.
-
-## Related Issues/PRs
-- Related PR: #
-- Related Issue: #
+- [ ] Documentation updated
+- [ ] No new warnings introduced
