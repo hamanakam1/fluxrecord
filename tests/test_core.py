@@ -40,7 +40,7 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(self.l.decide("a", "accept", "reviewed")["status"], "done")
         self.assertEqual(self.l.status()["metrics"]["accepted"], 1)
         self.assertEqual(self.l.task("a")["status"], "done")
-        self.assertIsNone(self.l.status()["metrics"]["measured_token_savings"])
+        self.assertNotIn("measured_token_savings", self.l.status()["metrics"])
 
     def test_concurrent_claim_has_one_winner(self):
         def claim(n):

@@ -103,6 +103,7 @@ creates a review, and only an operator decision creates a done.
 | `flux export [--project .fluxrecord]` | Write tickets and evidence as files |
 | `flux import --file tickets.csv [--dry-run] [--reassign]` | Import a CSV backlog into the ledger |
 | `flux status` | Ledger state, metrics and failure history |
+| `flux status --summary` | The board: one line per ticket, for a person to read |
 | `flux list [--status S] [--priority N] [--tag T] [--scope S] [--owner O] [--compact]` | List tickets with filters |
 | `flux show <id>` | One ticket with its sessions, checkpoints, failures and events |
 | `flux events [--after N] [--type T] [--task ID] [--limit N]` | The event log, as JSON |
@@ -341,6 +342,20 @@ fixed to HS256 and read from the header rather than trusted from it, so
 with `hmac.compare_digest`; `exp`, `nbf`, `iss` and `aud` are checked on
 every verification; refresh tokens rotate and are spent once; and every
 token carries a `jti`, so it can be revoked.
+
+---
+
+## The Board
+
+`flux status --summary` is the ledger as something a person can read: one
+line per ticket with its status, owner, age, tokens, last evidence and
+open failures. It is all fact — nothing there is an estimate of work
+nobody measured.
+
+```bash
+flux status --summary
+flux status --summary --status in_progress
+```
 
 ---
 

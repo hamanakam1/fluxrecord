@@ -36,7 +36,9 @@ def parser() -> argparse.ArgumentParser:
     init = sub.add_parser("init", help="create the ledger and the project layout")
     init.add_argument("--project", default=".fluxrecord", help="project directory for ticket files")
 
-    sub.add_parser("status")
+    stat = sub.add_parser("status")
+    stat.add_argument("--summary", action="store_true", help="a board: one line per ticket")
+    stat.add_argument("--status", default=None)
 
     lst = sub.add_parser("list", help="list tickets with filters")
     lst.add_argument("--status")
@@ -467,7 +469,15 @@ def main() -> None:
         result: dict[str, Any]
 
         if cmd == "status":
-            result = ledger.status()
+            if a.summary:
+                board = ledger.board(a.status)
+                result = {
+                    "board": board,
+                    "count": len(board),
+                    "note": "Facts about the tickets, not estimates of work nobody measured.",
+                }
+            else:
+                result = ledger.status()
         elif cmd == "show":
             result = ledger.show(a.task)
         elif cmd == "sessions":

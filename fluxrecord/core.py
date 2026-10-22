@@ -71,10 +71,11 @@ class Ledger:
         path = Path(path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(path, timeout=10, isolation_level=None)
-        path.chmod(0o600)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA foreign_keys=ON")
-        self.db.execute("PRAGMA journal_mode=WAL")
+        try:
+            self._prepare(path)
+        except BaseException:
+            self.db.close()
+            raise
         fresh = (
             self.db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
@@ -123,6 +124,13 @@ class Ledger:
         self.db.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS task_seed_key ON tasks(seed_key) WHERE seed_key <> ''"
         )
+
+    def _prepare(self, path: Path) -> None:
+        """Everything the database needs before it can be used."""
+        path.chmod(0o600)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA foreign_keys=ON")
+        self.db.execute("PRAGMA journal_mode=WAL")
 
     def _migrate(self, fresh: bool) -> None:
         """Move the database forward, additively and idempotently."""
@@ -715,6 +723,51 @@ class Ledger:
             "execution_authorized": False,
         }
 
+    def board(self, status: str | None = None) -> list[dict[str, Any]]:
+        """The ledger as a board: one line per ticket, for a person to read.
+
+        Every field is either a fact about the ticket or something that was
+        measured. Nothing here is an estimate of something nobody measured.
+        """
+        now = time.time()
+        board: list[dict[str, Any]] = []
+        for task in self.list_tasks(status=status, limit=1000):
+            task_id = str(task["id"])
+            session = self.db.execute(
+                "SELECT owner,tokens,lease_until FROM sessions WHERE task_id=? AND status='active'",
+                (task_id,),
+            ).fetchone()
+            latest = self.db.execute(
+                "SELECT c.summary,c.tokens,c.created FROM checkpoints c"
+                " JOIN sessions s ON s.id=c.session_id WHERE s.task_id=?"
+                " ORDER BY c.id DESC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            failures = self.db.execute(
+                "SELECT COUNT(*) AS n FROM failures WHERE task_id=?", (task_id,)
+            ).fetchone()["n"]
+            tokens = self.db.execute(
+                "SELECT COALESCE(SUM(tokens),0) FROM sessions WHERE task_id=?", (task_id,)
+            ).fetchone()[0]
+            board.append(
+                {
+                    "id": task_id,
+                    "title": task.get("title", ""),
+                    "status": task.get("status", ""),
+                    "priority": task.get("priority", 2),
+                    "owner": task.get("owner", "") or (session["owner"] if session else ""),
+                    "age_seconds": round(now - float(task.get("created", now))),
+                    "tokens": tokens,
+                    "last_evidence": latest["summary"] if latest else "",
+                    "last_evidence_at": latest["created"] if latest else None,
+                    "failures": failures,
+                    "lease_remaining": (
+                        round(session["lease_until"] - now, 1) if session else None
+                    ),
+                }
+            )
+        return board
+
     def sessions(self, active_only: bool = False) -> list[dict[str, Any]]:
         """The sessions in the ledger, with what each one is holding.
 
@@ -944,8 +997,6 @@ class Ledger:
                 "reported_tokens": self.db.execute(
                     "SELECT COALESCE(SUM(tokens),0) FROM sessions"
                 ).fetchone()[0],
-                "measured_cash_cost": None,
-                "measured_token_savings": None,
             },
         }
 
