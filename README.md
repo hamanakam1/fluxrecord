@@ -669,14 +669,23 @@ risks, and what this project will deliberately not build — is in
 - [x] Ticket file storage (`.fluxrecord/` layout)
 - [x] Local tooling inventory
 - [x] JWT auth routes (login, refresh, revoke, introspect)
-- [ ] Settle the status vocabulary (the spec and the code must agree)
-- [ ] Measure the context saving (packet hashes, deltas, a budget policy)
-- [ ] Coordination: lease handoff, adoption, `flux watch`
-- [ ] A written threat model, and an event log that detects an edit
-- [ ] Freeze the wire format, and publish a conformance suite
-- [x] Real-time updates without a server (`flux watch`)
-- [ ] Plugin system for custom tabs
-- [ ] Kubernetes manifests + Helm chart
+- [x] One status vocabulary — the specification and the code agree, and a
+      test keeps them agreeing
+- [x] The context saving measured — content-addressed packets, deltas, a
+      budget policy, and a benchmark that puts the number in this file
+- [x] Coordination — lease handoff, adoption, and `flux watch`: real-time
+      with no server and no socket
+- [x] A written threat model, and an event log that detects an edit
+- [x] The wire format frozen — published as a generated JSON Schema, with a
+      conformance suite that can check somebody else's implementation
+- [ ] Federation between ledgers, and read-only renderers
+
+**Removed from the roadmap:** Kubernetes manifests and a Helm chart. There
+is no server component to deploy, and a local-first CLI with no server has
+nothing to put in a chart. It comes back only if a server is earned rather
+than assumed. The same goes for a plugin system: a plug-in may read the
+ledger and print, and may not import the core's internals, reach the
+network, or run other plug-ins.
 
 ---
 
