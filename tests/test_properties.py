@@ -38,11 +38,16 @@ class TokenBudgetTest(unittest.TestCase):
             highest = 0
             for count in counts:
                 try:
-                    book.checkpoint(session, "s", f"evidence-{count}", "next", count)
+                    result = book.checkpoint(session, "s", f"evidence-{count}", "next", count)
                 except Conflict:
                     break
                 highest = max(highest, count)
-                self.assertGreaterEqual(book._session(session)["tokens"], highest)
+                row = book.db.execute(
+                    "SELECT tokens FROM sessions WHERE id=?", (session,)
+                ).fetchone()
+                self.assertGreaterEqual(row["tokens"], highest)
+                if result["status"] == "blocked":
+                    break
         finally:
             book.close()
             temp.cleanup()

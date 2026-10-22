@@ -166,7 +166,8 @@ fluxrecord/
 │   ├── tools.py         # Local executable inventory
 │   ├── dashboard.py     # Bounded GET-only ticket preview
 │   ├── github_sync.py   # Durable GitHub observations + outbox
-│   └── github_cycle.py  # One observe/reconcile/publish cycle
+│   ├── github_cycle.py  # One observe/reconcile/publish cycle
+│   └── auth/            # JWT: jwt.py, middleware.py, routes.py
 ├── tests/
 ├── templates/           # Ticket and checkpoint templates
 └── SPEC.md              # Full specification
@@ -195,6 +196,35 @@ The repository's own `tickets.csv` is the worked example — 98 rows that
 reuse 31 ids. A reused id is reported as a conflict rather than silently
 dropped; `--reassign` gives those rows a fresh sequential id instead and
 reports the old and new id for each.
+
+---
+
+## Authentication
+
+`fluxrecord.auth` is a JWT implementation with no third-party crypto and no
+web framework: HMAC-SHA256 by hand, base64url by hand, and a dispatcher that
+takes a method, a path, a body and headers.
+
+```python
+from fluxrecord.auth import AuthRoutes
+
+routes = AuthRoutes(secret, issuer="fluxrecord", audience="api",
+                    verify_credentials=check_credentials)
+
+response = routes.handle("POST", "/api/auth/login",
+                          {"username": "terminal-1", "password": "..."})
+response.body["access_token"]
+```
+
+Routes: `login`, `refresh`, `revoke`, `introspect` (RFC 7662) and `logout`.
+Errors come back as RFC 7807 problems.
+
+The rules that matter are enforced rather than assumed: the algorithm is
+fixed to HS256 and read from the header rather than trusted from it, so
+`alg: none` and algorithm confusion are refused; signatures are compared
+with `hmac.compare_digest`; `exp`, `nbf`, `iss` and `aud` are checked on
+every verification; refresh tokens rotate and are spent once; and every
+token carries a `jti`, so it can be revoked.
 
 ---
 
@@ -272,7 +302,7 @@ flux decide M-397001 accept --reason "Reviewed diff and tests"
 - [x] Dashboard preview (bounded GET-only)
 - [x] Ticket file storage (`.fluxrecord/` layout)
 - [x] Local tooling inventory
-- [ ] JWT auth routes (login, refresh, revoke, introspect)
+- [x] JWT auth routes (login, refresh, revoke, introspect)
 - [ ] WebSocket real-time updates
 - [ ] Plugin system for custom tabs
 - [ ] Kubernetes manifests + Helm chart
