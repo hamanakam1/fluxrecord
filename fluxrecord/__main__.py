@@ -33,6 +33,17 @@ def parser() -> argparse.ArgumentParser:
         g.add_argument("--repo", required=True)
         g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
 
+    g = sub.add_parser("github-publish", help="queue and publish an idempotent comment")
+    g.add_argument("--repo", required=True)
+    g.add_argument("--issue", type=int, required=True)
+    g.add_argument("--key", required=True, help="idempotency key (max 100 characters)")
+    g.add_argument("--body", required=True)
+    g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+
+    g = sub.add_parser("github-reconcile", help="confirm sent comments against the issue")
+    g.add_argument("--repo", required=True)
+    g.add_argument("--sync-db", default=str(Path.home() / ".fluxrecord" / "github.sqlite"))
+
     g = sub.add_parser("github-cycle")
     g.add_argument("--config", required=True)
 
@@ -123,15 +134,21 @@ def main() -> None:
             print(json.dumps(cycle(a.config)))
             return
 
-        if a.command in ("github-poll", "github-status"):
+        if a.command in ("github-poll", "github-status", "github-publish", "github-reconcile"):
             from .github_sync import GitHubSync
 
             sync = GitHubSync(a.sync_db)
             try:
                 if a.command == "github-poll":
                     print(json.dumps(sync.poll(a.repo, max_pages=20), indent=2))
-                else:
+                elif a.command == "github-status":
                     print(json.dumps(sync.status(a.repo), indent=2))
+                elif a.command == "github-publish":
+                    queued = sync.enqueue(a.repo, a.issue, a.key, a.body)
+                    published = sync.publish(a.repo)
+                    print(json.dumps({"queued": queued, "published": published}, indent=2))
+                else:
+                    print(json.dumps(sync.reconcile(a.repo), indent=2))
             finally:
                 sync.close()
             return
