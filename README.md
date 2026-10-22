@@ -426,6 +426,14 @@ flux verify --signed           # fails when the ledger is not signed
 The chain is off by default: a ledger nobody signs is still a ledger, and
 `flux verify` says so rather than pretending to have checked something.
 
+A chain is a prefix, so the head of the chain is recorded beside the log
+and compared on every check. That catches a log truncated at the end as
+well as one edited in the middle. What it proves is that the log has not
+been edited *by somebody who does not have the key*: without the key, an
+editor cannot compute a valid digest for a changed event. It is evidence,
+not protection — and the head is in the same file as the log, so somebody
+who can write to one can write to the other.
+
 ---
 
 ## Threat Model

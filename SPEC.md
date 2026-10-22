@@ -359,6 +359,27 @@ comes from `FLUX_EVENT_KEY`, or from a file `FLUX_EVENT_KEY_FILE` names.
 A ledger nobody signed is still a ledger, and `flux verify` says it cannot
 be checked rather than implying that it was.
 
+### What the chain proves, and what it does not
+
+A chain is a prefix, so it proves the log from its first event up to the
+last one it holds. The head of the chain is recorded beside the log and
+compared on every check, so a log that has been truncated at the end is
+detected as well:
+
+    verify_chain() -> {"signed": true, "ok": false, "broken_at": null,
+                       "head": "…", "note": "…no longer ends where it was
+                       recorded to end…"}
+
+What it proves is that the log has not been edited *by somebody who does
+not have the key*. Without the key, an editor cannot compute a valid
+digest for a changed event, so an edit in the middle, a deletion in the
+middle, an insertion and a truncation are all visible.
+
+What it does not prove is anything against somebody who has the key, and
+the recorded head is in the same file as the log, so an editor who can
+write to one can write to the other. The chain catches accidents and
+casual edits. It is evidence, not protection.
+
 ---
 
 ## GitHub Sync Contract

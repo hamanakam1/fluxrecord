@@ -39,6 +39,18 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   is null sometimes is fine; one that is null always is a promise the tool
   cannot keep. `token_count` and `quality_estimate` are gone with it — they
   could never carry a value.
+- **The event chain is reachable, and tested.** Every ledger the CLI opens
+  is now chained when `FLUX_EVENT_KEY` is set, so the chain is no longer a
+  capability that exists only inside the library. `tests/test_chain.py`
+  tampers with a ledger — editing an event, deleting one, inserting one,
+  truncating the end — and checks that the chain notices each of them.
+- **A truncated log is detected.** A chain is a prefix, so dropping the
+  last events used to leave a valid chain over what was left. The head of
+  the chain is now recorded beside the log and compared on every check, so
+  a truncation is visible too. The specification and the README say
+  exactly what this does and does not prove: it is evidence against
+  somebody who does not have the key, not protection against somebody who
+  does.
 
 ### Changed
 

@@ -244,13 +244,17 @@ answers neither.
 
 **Exit criteria**
 
-- [ ] An ADR choosing between the bounded local service and the library-only
+- [x] An ADR choosing between the bounded local service and the library-only
       position, with the reasoning written down.
-- [ ] A threat model that names the assets, the actors and the mitigations —
+- [x] A threat model that names the assets, the actors and the mitigations —
       including the ones that are accepted rather than solved.
-- [ ] Optional event-chain signing, off by default, with a `flux verify`
-      command that detects a modified event.
-- [ ] A secret-handling rule that survives contact with contributors: no
+- [x] Optional event-chain signing, off by default, with a `flux verify`
+      command that detects a modified event. The chain covers every event
+      with an HMAC of the one before it, the head of the chain is recorded
+      beside the log so a truncation is visible too, and
+      `tests/test_chain.py` tampers with a ledger four different ways and
+      checks that the chain notices each of them.
+- [x] A secret-handling rule that survives contact with contributors: no
       credential in the repository, no credential in a fixture, every
       credential injected at run time.
 
@@ -566,10 +570,14 @@ planning.
    roadmap. It needs no server, no port and no new boundary, and it works
    over the file the reader already has open.
 
-3. **Should `auth` become a bounded local service, or stay a library?**
-   *Recommendation:* write the ADR before either. The default should be
-   library-only, because a service is a new boundary and the project has
-   earned the right to add one only when it can say what it is for.
+3. ~~**Should `auth` become a bounded local service, or stay a library?**~~
+   **Settled: it stays a library.** ADR 0001 records the reasoning: a
+   server contradicts the core's promise of a stdlib-only ledger with no
+   network, and the package's value is that every part declares its own
+   boundary. The auth module exists for embedders — people putting a
+   ledger inside a service of their own — and the package ships the parts
+   that are hard to get right, and none of the parts that belong to a
+   deployment.
 
 4. ~~**Is the `taskrivet` marker renamed to `fluxrecord` before 1.0 or
    after?**~~
