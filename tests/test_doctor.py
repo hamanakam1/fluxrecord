@@ -44,6 +44,14 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(report["ledger"]["task_count"], 0)
         self.assertIn("schema", report["ledger"])
 
+    def test_the_doctor_does_not_create_a_ledger(self):
+        """A diagnostic must not create the thing it diagnoses."""
+        missing = self.root / "never-created.sqlite"
+        report = diagnose(missing, self.project, self.sync_db)
+        self.assertFalse(report["ledger"]["readable"])
+        self.assertFalse(report["ledger"]["exists"])
+        self.assertFalse(missing.exists())
+
     def test_tasks_are_counted_by_status(self):
         ledger = Ledger(self.db)
         ledger.add_task("M-1", "Objective", "Acceptance", scope=["repo/x"])

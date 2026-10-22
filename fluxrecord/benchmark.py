@@ -59,5 +59,6 @@ def measure(ledger: Any, task_id: str, root: str | Path = ".") -> dict[str, Any]
         "scoped_files_total": len(task.get("scope") or []),
         "note": "The packet against the files the ticket names. Files that "
         "do not exist are not counted, so the comparison never flatters "
-        "itself.",
+        "itself. Measuring records the packet, so the ledger remembers "
+        "what was measured.",
     }

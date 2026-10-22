@@ -30,6 +30,14 @@ def _ledger_report(db_path: str | Path) -> dict[str, Any]:
 
     report: dict[str, Any] = {"path": str(db_path)}
     ledger = None
+    path = Path(db_path).expanduser()
+    if not path.exists():
+        # A diagnostic must not create the thing it diagnoses.
+        report["readable"] = False
+        report["exists"] = False
+        report["error"] = "there is no ledger at this path yet"
+        return report
+    report["exists"] = True
     try:
         from .secrets import event_chain_key
 
