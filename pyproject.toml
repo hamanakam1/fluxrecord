@@ -41,6 +41,9 @@ flux = "fluxrecord.__main__:main"
 where = ["."]
 include = ["fluxrecord*"]
 
+[tool.setuptools.package-data]
+fluxrecord = ["py.typed"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

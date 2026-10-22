@@ -311,6 +311,15 @@ flux decide M-397001 accept --reason "Reviewed diff and tests"
 
 ---
 
+## Legacy
+
+`manage_tickets.py` and `tickets.csv` are the pre-ledger prototype: a CSV
+backlog with a reporting script on top. The ledger now does the enforcing
+that the script only reported on. `flux import` reads the same CSV, and
+`flux list` replaces the reporting.
+
+---
+
 ## Contributing
 
 ```bash

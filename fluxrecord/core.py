@@ -39,6 +39,10 @@ _MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
 
 _JSON_COLUMNS = ("scope", "tags", "depends_on", "blocks")
 
+#: The failure taxonomy from SPEC.md. A failure outside it is a typo, not a
+#: new category, so it is refused rather than recorded.
+FAILURE_CATEGORIES = ("lease_expired", "budget", "tool", "dependency", "no_progress")
+
 
 def positive(value: Any, name: str) -> None:
     if type(value) is not int or value <= 0:
@@ -407,6 +411,8 @@ class Ledger:
     def fail(self, sid: str, category: str, summary: str) -> dict[str, str]:
         required(category, "category")
         required(summary, "summary")
+        if category not in FAILURE_CATEGORIES:
+            raise ValueError(f"category must be one of {', '.join(FAILURE_CATEGORIES)}")
         self.reconcile()
         with self.transaction():
             session = self._session(sid)
@@ -526,15 +532,23 @@ class Ledger:
             "SELECT c.hash,c.body,t.source,t.expires FROM task_context t JOIN contexts c ON c.hash=t.hash WHERE task_id=? ORDER BY t.priority DESC,c.hash",
             (task_id,),
         ).fetchall()
+        # Size the packet as it grows instead of re-encoding it for every
+        # candidate: a ticket with many contexts used to cost time quadratic
+        # in the size of the packet.
+        base = len(encode())
         for row in rows:
             if row["expires"] is not None and row["expires"] <= time.time():
                 omitted.append({"hash": row["hash"], "reason": "expired"})
                 continue
             entry = {"hash": row["hash"], "source": row["source"], "body": row["body"]}
-            packet["context"].append(entry)
-            if len(encode()) > max_bytes:
-                packet["context"].pop()
+            fragment = len(json.dumps(entry, ensure_ascii=False, separators=(",", ":")).encode())
+            # One byte per context for the separating comma.
+            added = fragment + (1 if packet["context"] else 0)
+            if base + added > max_bytes:
                 omitted.append({"hash": row["hash"], "reason": "byte_budget"})
+                continue
+            packet["context"].append(entry)
+            base += added
         return {
             "packet": packet,
             "packet_bytes": len(encode()),
