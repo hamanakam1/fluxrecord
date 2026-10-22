@@ -152,6 +152,12 @@ def parser() -> argparse.ArgumentParser:
     d.add_argument("--token", default=None, help="bearer token, when the dashboard is protected")
     d.add_argument("--offset", type=int, default=0)
 
+    din = sub.add_parser("dashboard-intake", help="turn dashboard tickets into ledger tickets")
+    din.add_argument("--url", required=True, help="Explicit local ticket-service origin")
+    din.add_argument("--status", default="planned")
+    din.add_argument("--offset", type=int, default=0)
+    din.add_argument("--token", default=None, help="bearer token, when the dashboard is protected")
+
     b = sub.add_parser("tools")
     b.add_argument("--history", action="store_true")
     b.add_argument("--limit", type=int, default=50)
@@ -278,6 +284,25 @@ def main() -> None:
                     print(json.dumps(sync.reconcile(a.repo), indent=2))
             finally:
                 sync.close()
+            return
+
+        if a.command == "dashboard-intake":
+            from .core import Ledger
+            from .dashboard import preview
+            from .intake import intake_dashboard
+
+            seen = preview(a.url, a.status, a.offset, a.token)
+            ledger = Ledger(a.db)
+            try:
+                print(
+                    json.dumps(
+                        intake_dashboard(ledger, seen, a.url),
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                )
+            finally:
+                ledger.close()
             return
 
         if a.command == "dashboard-preview":

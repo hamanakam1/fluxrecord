@@ -113,6 +113,7 @@ creates a review, and only an operator decision creates a done.
 | `flux route <id> [--required-context N]` | Eligible profiles for a ticket |
 | `flux tools [--history] [--limit N]` | Local executable inventory |
 | `flux dashboard-preview --url http://127.0.0.1:8080` | Bounded local dashboard preview |
+| `flux dashboard-intake --url http://127.0.0.1:8080` | Turn dashboard tickets into ledger tickets |
 | `flux github-poll --repo owner/repo` | Observe a repository |
 | `flux github-status --repo owner/repo` | What has been observed, and what is queued |
 | `flux github-publish --repo owner/repo --issue N --key K --body B` | Queue and publish a marked comment |
@@ -260,6 +261,16 @@ published unless the config asks for it, and a repository that fails is
 recorded and skipped rather than stopping the cycle.
 
 ### From Observation to Ticket
+
+The dashboard is another source of work, watched the same way a repository
+is. `flux dashboard-intake` reads the local dashboard and gives each of
+its tickets a ledger ticket, seeded by the dashboard's own id so reading it
+twice does not create two tickets.
+
+```bash
+flux dashboard-intake --url http://127.0.0.1:8080
+```
+
 
 Observing a repository is only half the job. `flux github-intake` turns
 what was observed into work:

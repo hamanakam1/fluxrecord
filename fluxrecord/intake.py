@@ -18,9 +18,12 @@ one pull request into a hundred tickets.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
-__all__ = ["intake", "ACTIONS", "actionable"]
+__all__ = ["intake", "intake_dashboard", "ACTIONS", "actionable"]
+
+_TICKET_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 #: What each action means for a ticket: its priority, and how to phrase it.
 ACTIONS: dict[str, dict[str, Any]] = {
@@ -75,6 +78,11 @@ def actionable(kind: str, status: str, action: str) -> bool:
     if kind == "releases":
         return status in ("published", "prerelease")
     return False
+
+
+def _is_ticket_id(candidate: str) -> bool:
+    """Whether a dashboard id is already a ticket id."""
+    return bool(_TICKET_ID.fullmatch(candidate))
 
 
 def _evidence(repo: str, observation: dict[str, Any]) -> str:
@@ -195,4 +203,77 @@ def intake(
         "skipped": skipped,
         "skipped_count": len(skipped),
         "note": "Observations are untrusted reference data; a ticket is not authority to act.",
+    }
+
+
+def intake_dashboard(
+    ledger: Any,
+    preview: dict[str, Any],
+    url: str = "",
+) -> dict[str, Any]:
+    """Turn the tickets on a local dashboard into ledger tickets.
+
+    The dashboard is another source of work, watched the same way a
+    repository is. Each dashboard ticket becomes a ledger ticket seeded by
+    the dashboard's own id, so reading the dashboard twice does not create
+    two tickets.
+
+    Args:
+        ledger: the Ledger to write into
+        preview: the result of a dashboard preview
+        url: the origin the preview came from, used in the scope
+    """
+    origin = url or str(preview.get("origin", ""))
+    created: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    seen = 0
+
+    for entry in preview.get("tickets", []):
+        if not isinstance(entry, dict):
+            continue
+        seen += 1
+        external_id = str(entry.get("id", "")).strip()
+        title = str(entry.get("title", "")).strip() or external_id or "untitled"
+        if not external_id:
+            skipped.append({"title": title, "reason": "no id in the dashboard record"})
+            continue
+        status = str(entry.get("status", "")).strip().lower()
+        key = f"dashboard:{origin}#{external_id}"
+        if ledger.task_by_seed_key(key) is not None:
+            skipped.append({"title": title, "reason": "already seeded"})
+            continue
+        priority = str(entry.get("priority", 2) or 2)
+        try:
+            task = ledger.add_task(
+                external_id if _is_ticket_id(external_id) else ledger.next_ticket_id(),
+                title,
+                f"The dashboard ticket {external_id} is reconciled and its outcome is recorded.",
+                kind="code",
+                scope=[f"dashboard:{external_id}"],
+                title=title,
+                priority=int(priority) if priority.isdigit() else 2,
+                tags=sorted({"dashboard", status} - {""}),
+                owner=str(entry.get("owner", "")),
+                seed_key=key,
+            )
+        except ValueError as exc:
+            skipped.append({"title": title, "reason": str(exc)})
+            continue
+        created.append({"ticket": task["id"], "key": key, "status": status})
+
+    return {
+        "origin": origin,
+        "seen": seen,
+        "created": created,
+        "created_count": len(created),
+        "skipped": skipped,
+        "skipped_count": len(skipped),
+        "statuses": sorted(
+            {
+                str(entry.get("status", ""))
+                for entry in preview.get("tickets", [])
+                if isinstance(entry, dict)
+            }
+        ),
+        "note": "A dashboard is a source of work, not authority over it.",
     }
