@@ -154,6 +154,12 @@ class Ledger:
     def close(self) -> None:
         self.db.close()
 
+    def __enter__(self) -> Ledger:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     @contextmanager
     def transaction(self) -> Iterator[None]:
         self.db.execute("BEGIN IMMEDIATE")
@@ -704,6 +710,23 @@ class Ledger:
             "execution_authorized": False,
         }
 
+    def sessions(self, active_only: bool = False) -> list[dict[str, Any]]:
+        """The sessions in the ledger, with what each one is holding.
+
+        Each session says how much of its lease is left, which is the
+        number that matters when two workers want the same ticket.
+        """
+        now = time.time()
+        found: list[dict[str, Any]] = []
+        for row in self.db.execute("SELECT * FROM sessions ORDER BY created"):
+            session = dict(row)
+            session["lease_remaining"] = round(session["lease_until"] - now, 1)
+            session["expired"] = session["lease_until"] <= now
+            if active_only and session["status"] != "active":
+                continue
+            found.append(session)
+        return found
+
     def list_tasks(
         self,
         status: str | None = None,
@@ -876,8 +899,24 @@ class Ledger:
             },
         }
 
-    def events(self, after: int = 0) -> list[dict[str, Any]]:
-        return [
-            dict(r) | {"data": json.loads(r["data"])}
-            for r in self.db.execute("SELECT * FROM events WHERE seq>? ORDER BY seq", (after,))
-        ]
+    def events(
+        self,
+        after: int = 0,
+        kind: str | None = None,
+        task_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """The event log, optionally filtered."""
+        query = "SELECT * FROM events WHERE seq>?"
+        params: list[Any] = [after]
+        if kind:
+            query += " AND type=?"
+            params.append(kind)
+        if task_id:
+            query += " AND task_id=?"
+            params.append(task_id)
+        query += " ORDER BY seq"
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+        return [dict(r) | {"data": json.loads(r["data"])} for r in self.db.execute(query, params)]

@@ -33,6 +33,9 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
   and points at `PLAN.md` for the long-term view.
 - `CONTRIBUTING.md` explains the boundary check and what to do when a change
   needs a module the core may not import.
+- The documentation site has a "See it work" section that shows the real
+  CLI: the whole ticket loop, a failure that is a record, and the bounded
+  context packet.
 
 ## [0.2.0] — 2026-10-22
 

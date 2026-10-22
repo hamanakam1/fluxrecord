@@ -9,6 +9,7 @@ for it, and a failed repository never stops the others from being observed.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -61,17 +62,24 @@ def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, An
     if not isinstance(repos, list) or not repos:
         raise ValueError('config must list at least one repository under "repos"')
     publish = bool(config.get("publish", False))
+    intake = bool(config.get("intake", False))
     kinds = config.get("kinds")
     if kinds is not None and not isinstance(kinds, list):
         raise ValueError("kinds must be a list when present")
     default_db = str(Path.home() / ".fluxrecord" / "github.sqlite")
     sync_db = str(config.get("sync_db") or default_db)
+    ledger_db = str(
+        config.get("ledger_db")
+        or os.environ.get("FLUX_DB")
+        or str(Path.home() / ".fluxrecord" / "ledger.sqlite")
+    )
 
     results: list[dict[str, Any]] = []
     observed = 0
     changed = 0
     sent: list[str] = []
     confirmed: list[str] = []
+    ticketed = 0
     with GitHubSync(sync_db, runner=runner) as sync:
         for entry in repos:
             repo = _repo_of(entry)
@@ -101,6 +109,18 @@ def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, An
                     confirmed.extend(published["confirmed"])
             except (OSError, ValueError) as exc:
                 record["error"] = str(exc)
+            if intake:
+                try:
+                    from .core import Ledger
+                    from .intake import intake as take
+
+                    with Ledger(ledger_db) as book:
+                        taken = take(book, sync, repo, kinds)
+                    record["ticketed"] = taken["created_count"]
+                    record["attached"] = taken["attached_count"]
+                    ticketed += taken["created_count"]
+                except (OSError, ValueError) as exc:
+                    record["intake_error"] = str(exc)
             results.append(record)
 
     return {
@@ -110,6 +130,8 @@ def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, An
         "changed": changed,
         "published": len(sent),
         "confirmed": len(confirmed),
+        "ticketed": ticketed,
         "publish_requested": publish,
+        "intake_requested": intake,
         "note": "One cycle of observation and publication. Evidence, not authority.",
     }

@@ -158,6 +158,12 @@ def parser() -> argparse.ArgumentParser:
 
     e = sub.add_parser("events")
     e.add_argument("--after", type=int, default=0)
+    e.add_argument("--type", dest="kind", default=None)
+    e.add_argument("--task", dest="task_id", default=None)
+    e.add_argument("--limit", type=int, default=None)
+
+    ses = sub.add_parser("sessions", help="who is holding what, and for how long")
+    ses.add_argument("--active", action="store_true", help="only the sessions still holding work")
 
     a = sub.add_parser("task-add")
     a.add_argument("id")
@@ -290,7 +296,13 @@ def main() -> None:
 
         if a.command == "events":
             ledger = Ledger(a.db)
-            print(json.dumps(ledger.events(a.after), indent=2, ensure_ascii=False))
+            print(
+                json.dumps(
+                    ledger.events(a.after, a.kind, a.task_id, a.limit),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
             return
 
         if a.command == "token":
@@ -432,6 +444,14 @@ def main() -> None:
             result = ledger.status()
         elif cmd == "show":
             result = ledger.show(a.task)
+        elif cmd == "sessions":
+            sessions = ledger.sessions(a.active)
+            result = {
+                "sessions": sessions,
+                "count": len(sessions),
+                "active": sum(1 for s in sessions if s["status"] == "active"),
+                "note": "A lease is a claim on work, not a guarantee of progress.",
+            }
         elif cmd == "list":
             tickets = ledger.list_tasks(
                 a.status,

@@ -105,7 +105,8 @@ creates a review, and only an operator decision creates a done.
 | `flux status` | Ledger state, metrics and failure history |
 | `flux list [--status S] [--priority N] [--tag T] [--scope S] [--owner O]` | List tickets with filters |
 | `flux show <id>` | One ticket with its sessions, checkpoints, failures and events |
-| `flux events [--after N]` | The event log, as JSON |
+| `flux events [--after N] [--type T] [--task ID] [--limit N]` | The event log, as JSON |
+| `flux sessions [--active]` | Who is holding what, and how much lease is left |
 | `flux pack <id> [--max-bytes N] [--packet-only]` | Bounded context packet for a ticket |
 | `flux context-add <id> --file F --source S` | Attach context to a ticket |
 | `flux profile-add <id> --kind K --context-limit N --cost C` | Declare a profile |
