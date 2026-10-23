@@ -43,6 +43,8 @@ TIMEOUT_SECONDS = 30
 MAX_KEY_LENGTH = 100
 #: A response larger than this is refused rather than held in memory.
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+#: Refuse publication when a complete comment history cannot be read within this bound.
+MAX_COMMENT_PAGES = 20
 
 #: The action each observation kind implies.
 ACTIONS: dict[str, str] = {
@@ -311,7 +313,11 @@ class GitHubSync:
             for page in range(1, max_pages + 1):
                 query = "per_page=100" if page == 1 else f"per_page=100&page={page}"
                 payload = self._run(["api", f"{endpoint}?{query}"])
-                if not isinstance(payload, list) or not payload:
+                if kind == "runs" and isinstance(payload, dict):
+                    payload = payload.get("workflow_runs")
+                if not isinstance(payload, list):
+                    raise OSError(f"gh returned an invalid {kind} page; expected a list")
+                if not payload:
                     break
                 for record in payload:
                     if not isinstance(record, dict):
@@ -427,10 +433,19 @@ class GitHubSync:
         }
 
     def _comments(self, repo: str, issue: int) -> list[dict[str, Any]]:
-        payload = self._run(["api", f"repos/{repo}/issues/{issue}/comments?per_page=100"])
-        if not isinstance(payload, list):
-            return []
-        return [item for item in payload if isinstance(item, dict)]
+        comments: list[dict[str, Any]] = []
+        for page in range(1, MAX_COMMENT_PAGES + 1):
+            query = "per_page=100" if page == 1 else f"per_page=100&page={page}"
+            payload = self._run(["api", f"repos/{repo}/issues/{issue}/comments?{query}"])
+            if not isinstance(payload, list) or any(
+                not isinstance(item, dict) or not isinstance(item.get("body"), str)
+                for item in payload
+            ):
+                raise OSError("gh returned an invalid comment page; publication refused")
+            comments.extend(payload)
+            if len(payload) < 100:
+                return comments
+        raise OSError("comment history exceeded the page limit; publication refused")
 
     def publish(self, repo: str, limit: int = 20) -> dict[str, Any]:
         """Publish queued comments, skipping anything already marked."""

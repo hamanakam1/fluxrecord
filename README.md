@@ -257,6 +257,27 @@ double-posting. The namespace used to be `taskrivet`; that form is still
 read, so a comment published by an earlier version is recognised and
 never sent twice.
 
+Workflow runs are read from GitHub's `workflow_runs` envelope. Comment
+matching reads successive pages of 100 comments, up to 20 pages. If a
+comment page is malformed, fails to load, or the history reaches that
+limit without a final short page, publication leaves the item pending
+and reports failure. Reconciliation leaves it unconfirmed. This prevents
+an incomplete marker search from authorizing a duplicate comment.
+
+The adapter uses `gh api`; fixtures follow the GitHub REST
+[2022-11-28 workflow-run response](https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28)
+and [issue-comment pagination](https://docs.github.com/en/rest/issues/comments).
+Authentication and repository permissions come from the operator's `gh`
+configuration. Observation requires read access (including Actions access
+for workflow runs); publishing additionally requires permission to create
+issue comments and an explicit publish request. Observations are external
+evidence, not measured model usage or billing. Each subprocess is bounded
+by 30 seconds; there is no asynchronous cancellation handle or total cycle
+deadline. Pagination stops between calls. Tests use synthetic runners and
+a fake `gh` executable; specific installed CLI versions, live permissions,
+concurrent publishers, and histories changing during pagination have not
+been qualified. Use one publisher per outbox.
+
 ```bash
 flux github-poll --repo owner/repo
 flux github-status --repo owner/repo

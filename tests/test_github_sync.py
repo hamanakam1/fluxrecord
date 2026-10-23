@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from fluxrecord import github_cycle
 from fluxrecord.github_sync import (
@@ -151,13 +152,102 @@ class GitHubSyncTest(unittest.TestCase):
     def test_an_oversized_response_is_refused(self):
         from fluxrecord import github_sync
 
-        original = github_sync.MAX_RESPONSE_BYTES
-        github_sync.MAX_RESPONSE_BYTES = 10
-        try:
-            with self.assertRaises(OSError):
+        response = Mock(returncode=0, stdout='["' + "x" * 100 + '"]', stderr="")
+        with (
+            patch.object(github_sync, "MAX_RESPONSE_BYTES", 10),
+            patch.object(github_sync.subprocess, "run", return_value=response),
+        ):
+            with self.assertRaisesRegex(OSError, "exceeded 10 bytes"):
                 github_sync._gh_json(["api", "repos/owner/repo/issues"])
-        finally:
-            github_sync.MAX_RESPONSE_BYTES = original
+
+    def test_poll_paginates_workflow_run_envelopes(self):
+        runs = [
+            {"id": n, "name": "checks", "status": "completed", "conclusion": "failure"}
+            for n in range(1, 102)
+        ]
+        runner = Mock(
+            side_effect=[
+                {"total_count": 101, "workflow_runs": runs[:100]},
+                {"total_count": 101, "workflow_runs": runs[100:]},
+            ]
+        )
+        self.sync._run = runner
+        result = self.sync.poll("owner/repo", kinds=["runs"])
+        self.assertEqual(result["observed"], 101)
+        self.assertEqual(result["by_kind"], {"runs": 101})
+        self.assertEqual(
+            runner.call_args_list[1].args[0],
+            ["api", "repos/owner/repo/actions/runs?per_page=100&page=2"],
+        )
+        observations = self.sync.observations("owner/repo", kind="runs")
+        self.assertEqual(len(observations), 101)
+        self.assertTrue(all(row["status"] == "failure" for row in observations))
+        self.assertTrue(all(row["action"] == "investigate_failed_check" for row in observations))
+
+    def test_poll_refuses_malformed_workflow_run_envelopes(self):
+        for payload in ({"total_count": 1}, {"workflow_runs": {}}, None):
+            with self.subTest(payload=payload):
+                self.sync._run = Mock(return_value=payload)
+                with self.assertRaisesRegex(OSError, "runs"):
+                    self.sync.poll("owner/repo", kinds=["runs"])
+
+    def test_publish_finds_current_and_legacy_markers_on_later_pages(self):
+        for make_marker in (marker_for, legacy_marker_for):
+            with self.subTest(namespace=make_marker.__name__):
+                queued = self.sync.enqueue("owner/repo", 7, "summary", "the body")
+                runner = Mock(
+                    side_effect=[
+                        [{"body": "unrelated"}] * 100,
+                        [{"body": make_marker("summary", queued["body_hash"])}],
+                    ]
+                )
+                self.sync._run = runner
+                result = self.sync.publish("owner/repo")
+                self.assertEqual(result["confirmed"], ["summary"])
+                self.assertEqual(result["sent"], [])
+                self.assertEqual(runner.call_count, 2)
+                self.assertEqual(
+                    runner.call_args.args[0],
+                    ["api", "repos/owner/repo/issues/7/comments?per_page=100&page=2"],
+                )
+
+    def test_publish_refuses_incomplete_or_malformed_comment_history(self):
+        for payload in ({"message": "unexpected"}, ["bad comment"], [{}], [{"body": None}]):
+            with self.subTest(payload=payload):
+                self.sync.enqueue("owner/repo", 7, "summary", "the body")
+                runner = Mock(return_value=payload)
+                self.sync._run = runner
+                result = self.sync.publish("owner/repo")
+                self.assertEqual(result["failed"], ["summary"])
+                self.assertEqual(result["sent"], [])
+                self.assertEqual(runner.call_count, 1)
+                self.assertEqual(self.sync.status("owner/repo")["outbox"], {"pending": 1})
+
+    def test_publish_refuses_comment_history_at_page_limit(self):
+        self.sync.enqueue("owner/repo", 7, "summary", "the body")
+        runner = Mock(return_value=[{"body": "unrelated"}] * 100)
+        self.sync._run = runner
+        with patch("fluxrecord.github_sync.MAX_COMMENT_PAGES", 2, create=True):
+            result = self.sync.publish("owner/repo")
+        self.assertEqual(result["failed"], ["summary"])
+        self.assertEqual(result["sent"], [])
+        self.assertEqual(runner.call_count, 2)
+        self.assertEqual(self.sync.status("owner/repo")["outbox"], {"pending": 1})
+
+    def test_reconcile_finds_marker_on_later_page(self):
+        queued = self.sync.enqueue("owner/repo", 7, "summary", "the body")
+        self.sync.publish("owner/repo")
+        runner = Mock(
+            side_effect=[
+                [{"body": "unrelated"}] * 100,
+                [{"body": queued["marker"]}],
+            ]
+        )
+        self.sync._run = runner
+        result = self.sync.reconcile("owner/repo")
+        self.assertEqual(result["confirmed"], ["summary"])
+        self.assertEqual(result["missing"], [])
+        self.assertEqual(runner.call_count, 2)
 
     def test_marker_shape_matches_the_spec(self):
         marker = marker_for("summary", "a" * 64)
