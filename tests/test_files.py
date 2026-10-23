@@ -83,6 +83,28 @@ class FilesTest(unittest.TestCase):
         self.assertEqual(index["M-397001"]["title"], "JWT auth")
         self.assertEqual(index["M-397001"]["priority"], 1)
 
+    def test_export_uses_the_latest_finish_after_a_retry(self):
+        self.seed()
+        export(self.ledger, self.project)
+        self.ledger.decide("M-397001", "retry", "Cover the remaining cases")
+        started = self.ledger.start("M-397001", "terminal-2")
+        self.ledger.checkpoint(
+            started["session_id"], "Covered remaining cases", "Diff def456", "Review", 500
+        )
+        self.ledger.finish(started["session_id"], "All remaining cases tested")
+        self.ledger.decide("M-397001", "accept", "Reviewed both attempts")
+
+        export(self.ledger, self.project)
+
+        folder = self.project / "evidence" / "M-397001"
+        finish = json.loads((folder / "finish.json").read_text())
+        self.assertEqual(finish["session"], started["session_id"])
+        self.assertEqual(finish["evidence"], "All remaining cases tested")
+        events = self.ledger.evidence("M-397001")["events"]
+        finished = [event for event in events if event["type"] == "session.finished"]
+        self.assertEqual(len(finished), 2)
+        self.assertEqual(finished[0]["data"]["evidence"], "All endpoints tested")
+
     def test_export_of_an_empty_ledger_is_still_valid(self):
         result = export(self.ledger, self.project)
         self.assertEqual(result["tasks"], 0)

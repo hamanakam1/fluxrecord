@@ -85,13 +85,17 @@ def read_ticket(path: str | Path) -> dict[str, Any]:
     be read from it is read.
     """
     text = Path(path).expanduser().read_text(encoding="utf-8")
-    if not text.startswith("---"):
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n") != "---":
         raise ValueError("the file has no front matter")
-    parts = text.split("---", 2)
-    if len(parts) < 3:
+    end = next(
+        (index for index, line in enumerate(lines[1:], 1) if line.rstrip("\r\n") == "---"),
+        None,
+    )
+    if end is None:
         raise ValueError("the file has no front matter")
-    fields = _front_matter(parts[1])
-    body = parts[2]
+    fields = _front_matter("".join(lines[1:end]))
+    body = "".join(lines[end + 1 :])
     sections = _sections(body)
     ticket: dict[str, Any] = dict(fields)
     ticket["description"] = sections.get("Description", "").strip()
@@ -125,7 +129,10 @@ def _front_matter(block: str) -> dict[str, Any]:
                 parsed = [part.strip().strip('"') for part in raw[1:-1].split(",") if part.strip()]
             fields[name] = parsed
         elif raw.startswith('"') and raw.endswith('"'):
-            fields[name] = raw[1:-1]
+            try:
+                fields[name] = json.loads(raw)
+            except json.JSONDecodeError:
+                fields[name] = raw[1:-1]
         elif raw.lstrip("-").isdigit():
             fields[name] = int(raw)
         else:
@@ -304,7 +311,9 @@ def export(ledger: Any, project_dir: str | Path) -> dict[str, Any]:
             (folder / f"checkpoint-{number}.json").write_text(
                 json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
             )
-        for event in evidence["events"]:
+        # Events are in ledger order. A retry can finish again, so project
+        # the latest completion while retaining every attempt in the ledger.
+        for event in reversed(evidence["events"]):
             if event.get("type") == "session.finished":
                 (folder / "finish.json").write_text(
                     json.dumps(event.get("data", {}), indent=2, ensure_ascii=False) + "\n"

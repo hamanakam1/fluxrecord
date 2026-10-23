@@ -80,6 +80,29 @@ class ReadBackTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             read_ticket(path)
 
+    def test_quoted_scalar_values_survive_export_and_read(self):
+        for number, title in enumerate(
+            ('A --- B', 'café 東京', 'Say "hello"', r'repo\folder', 'First\nSecond')
+        ):
+            with self.subTest(title=title):
+                task_id = f"T-{number}"
+                self.ledger.add_task(
+                    task_id, "Objective", "Acceptance", scope=["repo/x"], title=title
+                )
+                export(self.ledger, self.project)
+                ticket = read_ticket(self.project / "tickets" / f"{task_id}.md")
+                self.assertEqual(ticket["title"], title)
+                self.assertEqual(ticket["scope"], ["repo/x"])
+                self.assertEqual(ticket["description"], "Objective")
+
+    def test_front_matter_requires_whole_line_delimiters(self):
+        for contents in ('---suffix\nid: "T-1"\n---\n', '---\ntitle: "A --- B"\n'):
+            with self.subTest(contents=contents):
+                path = self.root / "incomplete.md"
+                path.write_text(contents)
+                with self.assertRaises(ValueError):
+                    read_ticket(path)
+
     def test_the_file_and_the_ledger_agree(self):
         self.build()
         path = self.project / "tickets" / "M-397001.md"
