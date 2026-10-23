@@ -475,8 +475,14 @@ goodbye. A lease that runs out blocks its ticket, records a
 operator releases it — so a dead worker cannot be half-replaced by
 accident.
 
+After confirming the old worker has stopped, an operator can request a
+retry and acquire a new session. Usage from previous attempts still
+counts toward the ticket budget. Use `adopt` only while the existing
+lease is active.
+
 ```bash
-flux adopt <session_id> --owner terminal-2 --reason "the old worker is gone"
+flux decide <ticket_id> retry --reason "Confirmed the old worker has stopped"
+flux start <ticket_id> --owner terminal-2 --lease 900
 ```
 
 A transaction that is cut in half leaves nothing behind, a killed process

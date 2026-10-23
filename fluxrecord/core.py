@@ -602,7 +602,9 @@ class Ledger:
                 "INSERT INTO sessions(id,task_id,owner,status,lease_until,created) VALUES (?,?,?,'active',?,?)",
                 (sid, task_id, owner, now + lease_seconds, now),
             )
-            self.db.execute("UPDATE tasks SET status='in_progress' WHERE id=?", (task_id,))
+            self.db.execute(
+                "UPDATE tasks SET status='in_progress',owner=? WHERE id=?", (owner, task_id)
+            )
             self._touch(task_id)
             self.event("session.started", task_id, session=sid, owner=owner)
         return {"session_id": sid, "task_id": task_id, "lease_until": now + lease_seconds}
@@ -721,6 +723,7 @@ class Ledger:
             session = self._session(sid)
             previous = str(session["owner"])
             self.db.execute("UPDATE sessions SET owner=? WHERE id=?", (owner, sid))
+            self.db.execute("UPDATE tasks SET owner=? WHERE id=?", (owner, session["task_id"]))
             self._touch(session["task_id"])
             self.event(
                 "session.handed_off",
@@ -754,6 +757,7 @@ class Ledger:
             self.db.execute(
                 "UPDATE sessions SET owner=?, lease_until=? WHERE id=?", (owner, until, sid)
             )
+            self.db.execute("UPDATE tasks SET owner=? WHERE id=?", (owner, session["task_id"]))
             self._touch(session["task_id"])
             self.event(
                 "session.adopted",
