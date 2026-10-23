@@ -240,6 +240,14 @@ reuse 31 ids. A reused id is reported as a conflict rather than silently
 dropped; `--reassign` gives those rows a fresh sequential id instead and
 reports the old and new id for each.
 
+Collisions are checked against both the ledger and earlier rows using the
+objective and acceptance text. A dry run applies the same identity decisions
+for valid rows without writing or reconciling sessions; full task validation
+still happens during import. Newly reassigned rows retain a seed derived from
+their original ID and content, so a repeated import reuses the same task.
+Older reassigned tasks stored only their new ID; their original mappings are
+not inferred or migrated.
+
 ---
 
 ## GitHub Sync

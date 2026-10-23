@@ -12,11 +12,19 @@ existed. This maps that shape onto the ticket model:
 
 Seeding is idempotent, so an import can be repeated: tickets already seeded
 are left alone and reported as unchanged.
+
+Ordinary imports retain ``csv:<ID>`` seed keys. Newly reassigned rows use
+``csv:reassigned:<digest>`` keys derived from the original ID, objective and
+acceptance, so repeating the import finds the same reassignment. Existing
+keys are never changed. Older reassigned tickets only record their new ID;
+their original mapping cannot be recovered reliably and is not guessed.
 """
 
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -100,8 +108,15 @@ def import_csv(
     conflicts: list[dict[str, str]] = []
     duplicates: list[str] = []
     reassigned: list[dict[str, str]] = []
-    seen: dict[str, tuple[str, str, str]] = {}
-    used = {str(row.get("ID", "")).strip() for row in rows}
+    seen: set[tuple[str, str, str]] = set()
+    # Read the full identity inventory without status(), which reconciles
+    # expired sessions and would make a dry run mutate the ledger.
+    tasks = {
+        str(task["id"]): dict(task)
+        for task in ledger.db.execute("SELECT id,objective,acceptance,title,seed_key FROM tasks")
+    }
+    seeded = {task["seed_key"]: task for task in tasks.values() if task["seed_key"]}
+    used = set(tasks) | {_pick(row, "id") for row in rows}
 
     for row in rows:
         task_id = _pick(row, "id")
@@ -148,46 +163,62 @@ def import_csv(
         }
 
         fingerprint = (objective, acceptance)
-        if task_id in seen:
-            if seen[task_id][:2] == fingerprint:
-                duplicates.append(task_id)
+        identity = (task_id, objective, acceptance)
+        if identity in seen:
+            duplicates.append(task_id)
+            continue
+        existing = tasks.get(task_id)
+        if existing is not None:
+            if (existing["objective"], existing["acceptance"]) == fingerprint:
+                unchanged.append(task_id)
+                seen.add(identity)
                 continue
             if not reassign:
                 conflicts.append(
                     {
                         "id": task_id,
                         "title": payload["title"],
-                        "reason": "this id is already used by a different ticket in the same file",
-                        "held": seen[task_id][2],
+                        "reason": "this id is already used by a different ticket",
+                        "held": existing["title"],
                     }
                 )
                 continue
-            fresh = _next_id(used)
-            used.add(fresh)
+            digest = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+            payload["seed_key"] = f"csv:reassigned:{digest}"
+            previous = seeded.get(payload["seed_key"])
+            if (
+                previous is not None
+                and (previous["objective"], previous["acceptance"]) != fingerprint
+            ):
+                conflicts.append(
+                    {
+                        "id": task_id,
+                        "title": payload["title"],
+                        "reason": "the reassignment seed is already used by a different ticket",
+                        "held": previous["title"],
+                    }
+                )
+                continue
+            fresh = str(previous["id"]) if previous is not None else _next_id(used)
             reassigned.append({"from": task_id, "to": fresh, "title": payload["title"]})
+            if previous is not None:
+                unchanged.append(fresh)
+                seen.add(identity)
+                continue
+            used.add(fresh)
             task_id = fresh
             payload["task_id"] = fresh
-            payload["seed_key"] = f"csv:{fresh}"
 
-        if dry_run:
-            imported.append(task_id)
-            seen[task_id] = (objective, acceptance, payload["title"])
-            continue
-        try:
-            existing = ledger.task_view(task_id)
-        except ValueError:
-            existing = None
-        if existing is not None:
-            unchanged.append(task_id)
-            seen[task_id] = (objective, acceptance, payload["title"])
-            continue
-        try:
-            ledger.add_task(**payload)
-        except ValueError as exc:
-            skipped.append({"id": task_id, "reason": str(exc)})
-            continue
+        if not dry_run:
+            try:
+                ledger.add_task(**payload)
+            except ValueError as exc:
+                skipped.append({"id": task_id, "reason": str(exc)})
+                continue
         imported.append(task_id)
-        seen[task_id] = (objective, acceptance, payload["title"])
+        seen.add(identity)
+        tasks[task_id] = payload | {"id": task_id}
+        seeded[payload["seed_key"]] = tasks[task_id]
 
     return {
         "source": str(path),
