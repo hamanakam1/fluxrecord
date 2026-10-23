@@ -40,6 +40,13 @@ def _repo_of(entry: Any) -> str:
     return repo.strip()
 
 
+def _boolean(config: dict[str, Any], name: str) -> bool:
+    value = config.get(name, False)
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
+    return value
+
+
 def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, Any]:
     """Run one cycle described by a JSON config file.
 
@@ -51,6 +58,9 @@ def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, An
           "publish": false
         }
 
+    The optional ``publish`` and ``intake`` flags must be JSON booleans;
+    only an explicit ``true`` enables either action.
+
     Args:
         config_path: path to the JSON config
         runner: optional gh transport, injected by tests
@@ -61,8 +71,8 @@ def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, An
     repos = config.get("repos")
     if not isinstance(repos, list) or not repos:
         raise ValueError('config must list at least one repository under "repos"')
-    publish = bool(config.get("publish", False))
-    intake = bool(config.get("intake", False))
+    publish = _boolean(config, "publish")
+    intake = _boolean(config, "intake")
     kinds = config.get("kinds")
     if kinds is not None and not isinstance(kinds, list):
         raise ValueError("kinds must be a list when present")

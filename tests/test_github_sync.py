@@ -252,6 +252,8 @@ class GitHubCycleTest(unittest.TestCase):
         self.assertEqual(gh.posted, [])
 
     def test_cycle_publishes_only_when_asked(self):
+        with GitHubSync(self.root / "github.sqlite", runner=FakeGh()) as sync:
+            sync.enqueue("owner/repo", 7, "summary", "synthetic body")
         path = self.write_config(
             {
                 "repos": ["owner/repo"],
@@ -263,7 +265,56 @@ class GitHubCycleTest(unittest.TestCase):
         gh = FakeGh(issues=[issue(1)])
         result = github_cycle.cycle(path, runner=gh)
         self.assertTrue(result["publish_requested"])
+        self.assertEqual(result["published"], 1)
+        self.assertEqual(len(gh.posted), 1)
+
+    def test_cycle_false_flags_leave_queued_comments_and_ledger_untouched(self):
+        sync_db = self.root / "github.sqlite"
+        ledger_db = self.root / "ledger.sqlite"
+        with GitHubSync(sync_db, runner=FakeGh()) as sync:
+            sync.enqueue("owner/repo", 7, "summary", "synthetic body")
+        path = self.write_config(
+            {
+                "repos": ["owner/repo"],
+                "kinds": ["issues"],
+                "sync_db": str(sync_db),
+                "ledger_db": str(ledger_db),
+                "publish": False,
+                "intake": False,
+            }
+        )
+        gh = FakeGh(issues=[issue(1)])
+        result = github_cycle.cycle(path, runner=gh)
+        self.assertFalse(result["publish_requested"])
+        self.assertFalse(result["intake_requested"])
         self.assertEqual(result["published"], 0)
+        self.assertEqual(result["ticketed"], 0)
+        self.assertEqual(gh.posted, [])
+        self.assertFalse(ledger_db.exists())
+        with GitHubSync(sync_db, runner=FakeGh()) as sync:
+            self.assertEqual(sync.status("owner/repo")["outbox"], {"pending": 1})
+
+    def test_cycle_rejects_non_boolean_flags_before_any_side_effect(self):
+        for field in ("publish", "intake"):
+            for value in ("false", "true", "", 0, 1, 0.0, 1.0, None, [], [False], {}, {"on": True}):
+                with self.subTest(field=field, value=value):
+                    sync_db = self.root / "github.sqlite"
+                    ledger_db = self.root / "ledger.sqlite"
+                    path = self.write_config(
+                        {
+                            "repos": ["owner/repo"],
+                            "kinds": ["issues"],
+                            "sync_db": str(sync_db),
+                            "ledger_db": str(ledger_db),
+                            field: value,
+                        }
+                    )
+                    gh = FakeGh(issues=[issue(1)])
+                    with self.assertRaisesRegex(ValueError, f"{field} must be a boolean"):
+                        github_cycle.cycle(path, runner=gh)
+                    self.assertEqual(gh.calls, [])
+                    self.assertFalse(sync_db.exists())
+                    self.assertFalse(ledger_db.exists())
 
     def test_cycle_records_a_repository_error_without_stopping(self):
         path = self.write_config(
