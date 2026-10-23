@@ -312,7 +312,13 @@ class GitHubSync:
         for kind in selected:
             endpoint = _ENDPOINTS[kind].format(repo=repo)
             for page in range(1, max_pages + 1):
-                query = "per_page=100" if page == 1 else f"per_page=100&page={page}"
+                query = "per_page=100"
+                if kind in ("issues", "pulls"):
+                    # Include closures and prioritize recent transitions
+                    # within the caller's bounded page budget.
+                    query += "&state=all&sort=updated&direction=desc"
+                if page > 1:
+                    query += f"&page={page}"
                 payload = self._run(["api", f"{endpoint}?{query}"])
                 if kind == "runs":
                     # GitHub wraps run pages; injected runners may still use
@@ -325,13 +331,19 @@ class GitHubSync:
                         raise OSError("GitHub workflow runs response must contain objects")
                 if not isinstance(payload, list) or not payload:
                     break
+                accepted = 0
                 for record in payload:
                     if not isinstance(record, dict):
                         continue
+                    # GitHub includes pull requests in its issues endpoint.
+                    # They belong to the separately selected pulls kind.
+                    if kind == "issues" and "pull_request" in record:
+                        continue
+                    accepted += 1
                     observed += 1
                     if self._observe(repo, kind, record):
                         changed += 1
-                by_kind[kind] = by_kind.get(kind, 0) + len(payload)
+                by_kind[kind] = by_kind.get(kind, 0) + accepted
                 if len(payload) < 100:
                     break
         return {

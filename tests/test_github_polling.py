@@ -120,7 +120,9 @@ class WorkflowPollingTest(unittest.TestCase):
         result = self.sync.poll("owner/repo", kinds=["issues"])
         self.assertEqual(result["observed"], 1)
         self.assertEqual(result["by_kind"], {"issues": 1})
-        self.runner.assert_called_once_with(["api", "repos/owner/repo/issues?per_page=100"])
+        self.runner.assert_called_once_with(
+            ["api", "repos/owner/repo/issues?per_page=100&state=all&sort=updated&direction=desc"]
+        )
 
 
 if __name__ == "__main__":

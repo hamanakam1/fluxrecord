@@ -261,6 +261,15 @@ comment, release, run, commit and event, each implying one of six actions.
 The `gh` CLI is the only way out — no token is read or stored anywhere, and
 every call is bounded by a 30 second timeout.
 
+Issue and pull-request polling requests all states, ordered by most recent
+update, so closures can be observed within the page budget. Pull requests
+returned by GitHub's issues endpoint are excluded from the `issues` kind;
+select `pulls` to observe them as code reviews. Counts reflect accepted
+records, while page traversal uses the original response length. This
+prevents new duplicate issue/review intake; existing observations and
+already seeded tickets are retained. Bounded polling is not a complete
+inventory and may miss older items or transitions beyond the page cap.
+
 Workflow-run polling reads the `workflow_runs` array in GitHub's
 [repository workflow-runs response](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository).
 Malformed run envelopes fail the poll instead of appearing as an empty
