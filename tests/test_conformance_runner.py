@@ -27,6 +27,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.cli_support import isolated_cli_environment
+
 REPO = Path(__file__).resolve().parent.parent
 RUNNER = REPO / "conformance" / "run.py"
 
@@ -58,6 +60,7 @@ class ConformanceRunnerTest(unittest.TestCase):
             capture_output=True,
             text=True,
             cwd=REPO,
+            env=isolated_cli_environment(),
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("ok", result.stdout)
@@ -68,6 +71,7 @@ class ConformanceRunnerTest(unittest.TestCase):
             capture_output=True,
             text=True,
             cwd=REPO,
+            env=isolated_cli_environment(),
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         report = json.loads(result.stdout)
@@ -86,6 +90,7 @@ class ConformanceRunnerTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 cwd=REPO,
+                env=isolated_cli_environment(),
             )
         self.assertEqual(result.returncode, 1, "a broken implementation was accepted")
         self.assertIn("FAILED", result.stdout + result.stderr)
@@ -101,6 +106,7 @@ class ConformanceRunnerTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 cwd=REPO,
+                env=isolated_cli_environment(),
             )
         self.assertEqual(result.returncode, 1, "an implementation that answers nothing passed")
 

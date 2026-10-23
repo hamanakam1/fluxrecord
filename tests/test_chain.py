@@ -31,9 +31,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fluxrecord.core import Ledger
 from fluxrecord.secrets import event_chain_key
+from tests.cli_support import isolated_cli_environment
 
 KEY = "a-signing-key-that-is-long-enough-to-be-a-secret"
 
@@ -227,27 +229,44 @@ class VerifyCommandTest(unittest.TestCase):
         self.temp.cleanup()
 
     def flux(self, *args, expect=0, key=KEY):
-        environment = dict(os.environ)
+        environment = isolated_cli_environment(self.root)
         environment["FLUX_DB"] = str(self.db)
         if key:
             environment["FLUX_EVENT_KEY"] = key
-        else:
-            environment.pop("FLUX_EVENT_KEY", None)
         result = subprocess.run(
             [sys.executable, "-m", "fluxrecord", *args],
             capture_output=True,
             text=True,
             env=environment,
+            cwd=self.root,
         )
         self.assertEqual(result.returncode, expect, result.stderr)
         return result
 
     def test_a_signed_ledger_verifies_from_the_shell(self):
         self.flux("init", "--project", ".fluxrecord")
+        self.assertTrue((self.root / ".fluxrecord" / "index.json").is_file())
+        self.assertTrue((self.root / ".fluxrecord" / "tickets").is_dir())
         self.flux("task-add", "M-1", "--objective", "o", "--acceptance", "a", "--scope", "s")
         report = json.loads(self.flux("verify").stdout)
         self.assertTrue(report["signed"])
         self.assertTrue(report["ok"])
+
+    def test_cli_runs_in_the_temporary_fixture_directory(self):
+        completed = subprocess.CompletedProcess([], 0, stdout="{}", stderr="")
+        with mock.patch.object(subprocess, "run", return_value=completed) as run:
+            self.flux("init", "--project", ".fluxrecord")
+        self.assertEqual(run.call_args.kwargs.get("cwd"), self.root)
+
+    def test_unsigned_cli_ignores_an_ambient_event_key_file(self):
+        key_file = self.root / "ambient-synthetic-key.txt"
+        key_file.write_text("synthetic-ambient-key-for-this-test-only", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"FLUX_EVENT_KEY_FILE": str(key_file)}):
+            self.flux(
+                "task-add", "M-1", "--objective", "o", "--acceptance", "a", "--scope", "s", key=None
+            )
+            report = json.loads(self.flux("verify", key=None).stdout)
+        self.assertFalse(report["signed"])
 
     def test_a_broken_chain_fails_the_command(self):
         self.flux("init", "--project", ".fluxrecord")

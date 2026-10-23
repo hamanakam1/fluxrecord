@@ -12,6 +12,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from tests.cli_support import isolated_cli_environment
 
 
 class CliTest(unittest.TestCase):
@@ -37,9 +40,8 @@ fi
         self.temp.cleanup()
 
     def flux(self, *args, expect=0, env=None):
-        environment = dict(os.environ)
+        environment = isolated_cli_environment(self.root)
         environment["PATH"] = f"{self.bin}{os.pathsep}{environment.get('PATH', '')}"
-        environment["FLUX_DB"] = str(self.db)
         if env:
             environment.update(env)
         result = subprocess.run(
@@ -47,6 +49,7 @@ fi
             capture_output=True,
             text=True,
             env=environment,
+            cwd=self.root,
         )
         self.assertEqual(result.returncode, expect, result.stderr)
         return result
@@ -284,6 +287,16 @@ fi
         self.assertEqual(result["observed"], 1)
         report = self.json_out("github-status", "--repo", "owner/repo")
         self.assertEqual(report["observations"]["issues"], 1)
+
+    def test_github_commands_ignore_inherited_database_settings_in_the_fixture(self):
+        outside = self.root / "outside.sqlite"
+        original = b"synthetic data that the fixture must never open as SQLite"
+        outside.write_bytes(original)
+        with mock.patch.dict(os.environ, {"FLUX_GITHUB_DB": str(outside)}):
+            result = self.json_out("github-poll", "--repo", "owner/repo")
+        self.assertEqual(result["observed"], 1)
+        self.assertEqual(outside.read_bytes(), original)
+        self.assertTrue((self.root / "github.sqlite").is_file())
 
     def test_github_publish_and_reconcile(self):
         published = self.json_out(

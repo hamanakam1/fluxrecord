@@ -1,5 +1,6 @@
 """The gh transport enforces byte and time limits while collecting output."""
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,7 @@ class BoundedTransportTest(unittest.TestCase):
             return child
 
         with (
+            mock.patch.dict(os.environ, {"PATH": str(self.script.parent)}),
             mock.patch.object(github_sync.subprocess, "Popen", side_effect=launch),
             mock.patch.object(github_sync, "MAX_RESPONSE_BYTES", limit),
             mock.patch.object(github_sync, "_MAX_STDERR_BYTES", stderr_limit),

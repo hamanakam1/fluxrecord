@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 from fluxrecord import wire
+from tests.cli_support import isolated_cli_environment
 
 
 class ConformanceTest(unittest.TestCase):
@@ -28,15 +29,12 @@ class ConformanceTest(unittest.TestCase):
         self.temp.cleanup()
 
     def flux(self, *args, expect=0):
-        import os
-
-        environment = dict(os.environ)
-        environment["FLUX_DB"] = str(self.db)
         result = subprocess.run(
             [sys.executable, "-m", "fluxrecord", *args],
             capture_output=True,
             text=True,
-            env=environment,
+            env=isolated_cli_environment(self.root),
+            cwd=self.root,
         )
         self.assertEqual(result.returncode, expect, result.stderr)
         return json.loads(result.stdout) if result.stdout.strip() else {}

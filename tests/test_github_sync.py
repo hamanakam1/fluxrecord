@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -161,6 +162,7 @@ class GitHubSyncTest(unittest.TestCase):
             return real_popen([sys.executable, "-c", "print('[{\"number\": 7}]')"], **kwargs)
 
         with (
+            mock.patch.dict(os.environ, {"PATH": str(self.path.parent)}),
             mock.patch.object(github_sync, "MAX_RESPONSE_BYTES", 10),
             mock.patch.object(github_sync.subprocess, "Popen", side_effect=launch) as popen,
         ):

@@ -83,6 +83,13 @@ and real ticket data out of the rendered output.
 - **No telemetry** in core or read commands
 - **Synthetic fixtures only** in tests
 
+CLI subprocess tests should use `tests.cli_support.isolated_cli_environment`
+with a temporary fixture directory. It supplies temporary ledger/sync paths,
+removes inherited FluxRecord settings, and resolves this checkout explicitly.
+Run project-creating commands from the fixture directory. Keep real `gh`
+off a transport fixture's PATH even when its process launcher is mocked,
+so changing subprocess APIs cannot accidentally reach an authenticated CLI.
+
 ### The boundary is checked
 
 `tests/test_boundaries.py` reads the source with `ast` and refuses the core

@@ -4,26 +4,57 @@ If the documented interface drifts from the CLI, this fails.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from tests.cli_support import isolated_cli_environment
 
 
 class QuickStartTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.path = Path(self.temp.name) / "ledger.sqlite"
+        self.root = Path(self.temp.name)
+        self.path = self.root / "ledger.sqlite"
 
     def tearDown(self):
         self.temp.cleanup()
 
     def flux(self, *args):
         cmd = [sys.executable, "-m", "fluxrecord", "--db", str(self.path), *args]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=isolated_cli_environment(self.root),
+            cwd=self.root,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
+
+    def test_cli_ignores_ambient_storage_and_signing_key_files(self):
+        ambient = Path(self.temp.name) / "ambient"
+        ambient.mkdir()
+        key_file = ambient / "key.txt"
+        key_file.write_text("synthetic-environment-canary")
+        with mock.patch.dict(
+            os.environ,
+            {
+                "FLUX_DB": str(ambient / "ledger.sqlite"),
+                "FLUX_GITHUB_DB": str(ambient / "github.sqlite"),
+                "FLUX_EVENT_KEY": "",
+                "FLUX_EVENT_KEY_FILE": str(key_file),
+            },
+        ):
+            report = self.flux("verify")
+        self.assertFalse(report["signed"])
+        self.assertFalse((ambient / "ledger.sqlite").exists())
+        self.assertFalse((ambient / "github.sqlite").exists())
+        self.assertEqual(key_file.read_text(), "synthetic-environment-canary")
 
     def test_readme_quick_start_runs_end_to_end(self):
         added = self.flux(
@@ -91,7 +122,13 @@ class QuickStartTest(unittest.TestCase):
             "M-397002",
             "sideways",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=isolated_cli_environment(self.root),
+            cwd=self.root,
+        )
         self.assertEqual(result.returncode, 2)
 
     def test_legacy_accept_command_still_works(self):

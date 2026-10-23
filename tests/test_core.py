@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from fluxrecord.core import Conflict, Ledger
+from tests.cli_support import isolated_cli_environment
 
 
 class LedgerTest(unittest.TestCase):
@@ -190,13 +191,19 @@ class LedgerTest(unittest.TestCase):
         self.l.add_context("a", "界 context", "test")
         cmd = [sys.executable, "-m", "fluxrecord", "--db", str(self.path)]
         result = subprocess.run(
-            cmd + ["pack", "a", "--max-bytes", "1000", "--packet-only"], capture_output=True
+            cmd + ["pack", "a", "--max-bytes", "1000", "--packet-only"],
+            capture_output=True,
+            env=isolated_cli_environment(self.path.parent),
+            cwd=self.path.parent,
         )
         self.assertEqual(result.returncode, 0)
         self.assertLessEqual(len(result.stdout), 1000)
         self.assertEqual(json.loads(result.stdout)["objective"], "Fix search")
         result = subprocess.run(
-            cmd + ["start", "missing", "--owner", "worker"], capture_output=True
+            cmd + ["start", "missing", "--owner", "worker"],
+            capture_output=True,
+            env=isolated_cli_environment(self.path.parent),
+            cwd=self.path.parent,
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("unknown task", json.loads(result.stderr)["error"])
