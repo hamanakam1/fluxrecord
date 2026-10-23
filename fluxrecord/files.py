@@ -368,7 +368,9 @@ def _evidence_files(evidence: dict[str, Any]) -> Iterator[tuple[str, str]]:
             + hashlib.sha256(str(checkpoint["evidence"]).encode()).hexdigest(),
         }
         yield f"checkpoint-{number}.json", json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    for event in evidence["events"]:
+    # Ledger evidence is ordered by event sequence. A retry can finish again;
+    # the projection describes the newest completion while history stays intact.
+    for event in reversed(evidence["events"]):
         if event.get("type") == "session.finished":
             yield (
                 "finish.json",
