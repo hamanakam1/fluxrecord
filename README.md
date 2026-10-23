@@ -267,7 +267,10 @@ flux github-cycle --config templates/github-cycle.json
 
 A cycle is described by a JSON file — see
 [`templates/github-cycle.json`](templates/github-cycle.json). Nothing is
-published unless the config asks for it, and a repository that fails is
+published unless the config sets `"publish": true`. The `publish` and
+`intake` options accept only JSON booleans (`true` or `false`) and default
+to `false`; strings such as `"false"`, numbers, and `null` are rejected
+before any observations or writes. A repository that fails is
 recorded and skipped rather than stopping the cycle.
 
 ### From Observation to Ticket

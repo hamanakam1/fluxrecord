@@ -265,6 +265,52 @@ class GitHubCycleTest(unittest.TestCase):
         self.assertTrue(result["publish_requested"])
         self.assertEqual(result["published"], 0)
 
+    def test_cycle_rejects_non_boolean_controls_before_any_side_effect(self):
+        for field in ("publish", "intake"):
+            for value in ("false", "true", "", 0, 1, None, [], {}, [False]):
+                with self.subTest(field=field, value=value):
+                    sync_db = self.root / "unused-sync.sqlite"
+                    ledger_db = self.root / "unused-ledger.sqlite"
+                    path = self.write_config(
+                        {
+                            "repos": ["owner/repo"],
+                            "kinds": ["issues"],
+                            "sync_db": str(sync_db),
+                            "ledger_db": str(ledger_db),
+                            field: value,
+                        }
+                    )
+                    gh = FakeGh(issues=[issue(1)])
+                    with self.assertRaisesRegex(ValueError, f"{field} must be a JSON boolean"):
+                        github_cycle.cycle(path, runner=gh)
+                    self.assertEqual(gh.calls, [])
+                    self.assertFalse(sync_db.exists())
+                    self.assertFalse(ledger_db.exists())
+
+    def test_explicit_false_leaves_queued_comments_and_tickets_untouched(self):
+        sync_db = self.root / "github.sqlite"
+        ledger_db = self.root / "ledger.sqlite"
+        gh = FakeGh(issues=[issue(1)])
+        with GitHubSync(sync_db, runner=gh) as sync:
+            sync.enqueue("owner/repo", 1, "summary", "Synthetic review summary")
+        path = self.write_config(
+            {
+                "repos": ["owner/repo"],
+                "kinds": ["issues"],
+                "sync_db": str(sync_db),
+                "ledger_db": str(ledger_db),
+                "publish": False,
+                "intake": False,
+            }
+        )
+        result = github_cycle.cycle(path, runner=gh)
+        self.assertFalse(result["publish_requested"])
+        self.assertFalse(result["intake_requested"])
+        self.assertEqual(result["published"], 0)
+        self.assertEqual(result["ticketed"], 0)
+        self.assertEqual(gh.posted, [])
+        self.assertFalse(ledger_db.exists())
+
     def test_cycle_records_a_repository_error_without_stopping(self):
         path = self.write_config(
             {

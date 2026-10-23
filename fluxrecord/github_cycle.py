@@ -61,8 +61,11 @@ def cycle(config_path: str | Path, runner: Runner | None = None) -> dict[str, An
     repos = config.get("repos")
     if not isinstance(repos, list) or not repos:
         raise ValueError('config must list at least one repository under "repos"')
-    publish = bool(config.get("publish", False))
-    intake = bool(config.get("intake", False))
+    publish = config.get("publish", False)
+    intake = config.get("intake", False)
+    for field, value in (("publish", publish), ("intake", intake)):
+        if not isinstance(value, bool):
+            raise ValueError(f"{field} must be a JSON boolean (true or false)")
     kinds = config.get("kinds")
     if kinds is not None and not isinstance(kinds, list):
         raise ValueError("kinds must be a list when present")
