@@ -109,6 +109,35 @@ class VerifyTest(unittest.TestCase):
         with self.assertRaises(AuthError):
             verify(token, SECRET)
 
+    def test_a_token_cannot_be_used_before_its_not_before_claim(self):
+        token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": 1031})
+        with self.assertRaises(AuthError):
+            verify(token, SECRET, now=1000)
+        self.assertEqual(introspect(token, SECRET, now=1000), {"active": False})
+
+    def test_not_before_uses_the_existing_clock_leeway(self):
+        for not_before in (999, 1000, 1000.5, 1030):
+            with self.subTest(not_before=not_before):
+                token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": not_before})
+                self.assertEqual(verify(token, SECRET, now=1000).subject, "terminal-1")
+
+    def test_a_malformed_not_before_claim_is_refused(self):
+        for not_before in (
+            None,
+            True,
+            False,
+            "1000",
+            [],
+            {},
+            float("nan"),
+            float("inf"),
+            -float("inf"),
+        ):
+            with self.subTest(not_before=not_before):
+                token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": not_before})
+                with self.assertRaises(AuthError):
+                    verify(token, SECRET, now=1000)
+
     def test_the_issuer_must_match(self):
         token, _ = issue("terminal-1", SECRET, issuer="someone-else")
         with self.assertRaises(AuthError):
@@ -142,6 +171,12 @@ class IntrospectTest(unittest.TestCase):
     def test_an_expired_token_is_inactive(self):
         token, _ = issue("terminal-1", SECRET, ttl_seconds=60, now=int(time.time()) - 3600)
         self.assertFalse(introspect(token, SECRET)["active"])
+
+    def test_introspection_honors_issuer_and_audience_constraints(self):
+        token, _ = issue("terminal-1", SECRET, issuer="fluxrecord", audience="api")
+        self.assertTrue(introspect(token, SECRET, issuer="fluxrecord", audience="api")["active"])
+        self.assertEqual(introspect(token, SECRET, issuer="other"), {"active": False})
+        self.assertEqual(introspect(token, SECRET, audience="other"), {"active": False})
 
 
 class MiddlewareTest(unittest.TestCase):
@@ -271,6 +306,19 @@ class RoutesTest(unittest.TestCase):
         self.assertEqual(report.status, 200)
         self.assertTrue(report.body["active"])
         self.assertEqual(report.body["sub"], "terminal-1")
+
+    def test_introspect_refuses_tokens_outside_the_configured_identity(self):
+        for issuer, audience in (
+            ("other", "api"),
+            ("fluxrecord", "other"),
+            ("", "api"),
+            ("fluxrecord", ""),
+        ):
+            with self.subTest(issuer=issuer, audience=audience):
+                token, _ = issue("terminal-1", SECRET, issuer=issuer, audience=audience)
+                report = self.routes.handle("POST", "/api/auth/introspect", {"token": token})
+                self.assertEqual(report.status, 200)
+                self.assertEqual(report.body, {"active": False})
 
     def test_logout_revokes_every_token_it_is_given(self):
         login = self.routes.handle(

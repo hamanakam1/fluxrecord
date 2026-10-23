@@ -168,7 +168,14 @@ class AuthRoutes:
         token = str(body.get("token", ""))
         if not token:
             return _problem(400, "invalid-request", "token is required")
-        report = introspect(token, self.secret, now=self._moment(), revoked=self.revoked)
+        report = introspect(
+            token,
+            self.secret,
+            now=self._moment(),
+            revoked=self.revoked,
+            issuer=self.issuer,
+            audience=self.audience,
+        )
         return Response(200, report)
 
     def logout(self, body: Mapping[str, Any]) -> Response:

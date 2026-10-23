@@ -19,6 +19,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import secrets
 import time
 from collections.abc import Iterable
@@ -186,6 +187,14 @@ def decode(token: str, secret: str | bytes, now: int | None = None) -> Claims:
         raise AuthError("token expired")
     if issued > moment + _LEEWAY_SECONDS:
         raise AuthError("token is not valid yet")
+    if "nbf" in payload:
+        not_before = payload["nbf"]
+        if type(not_before) not in (int, float) or (
+            isinstance(not_before, float) and not math.isfinite(not_before)
+        ):
+            raise AuthError("invalid not-before claim")
+        if not_before > moment + _LEEWAY_SECONDS:
+            raise AuthError("token is not valid yet")
     return Claims(
         subject=subject,
         issued_at=issued,
@@ -227,6 +236,8 @@ def introspect(
     secret: str | bytes,
     now: int | None = None,
     revoked: RevocationList | None = None,
+    issuer: str = "",
+    audience: str = "",
 ) -> dict[str, Any]:
     """Describe a token the way RFC 7662 asks for.
 
@@ -234,7 +245,7 @@ def introspect(
     introspection is to tell a relying party whether to trust the token.
     """
     try:
-        claims = verify(token, secret, now, revoked)
+        claims = verify(token, secret, now, revoked, issuer=issuer, audience=audience)
     except AuthError:
         return {"active": False}
     return {
