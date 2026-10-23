@@ -37,7 +37,9 @@ class AsciiArtTest(unittest.TestCase):
         self.assertEqual(ascii_art.get_art("minimal"), "fluxrecord")
 
     def test_color_wraps_the_mark_in_ansi(self):
-        colored = ascii_art.get_art("large", color=True)
+        with mock.patch.dict(os.environ):
+            os.environ.pop("NO_COLOR", None)
+            colored = ascii_art.get_art("large", color=True)
         self.assertIn("\x1b[", colored)
         self.assertIn("\x1b[0m", colored)
 

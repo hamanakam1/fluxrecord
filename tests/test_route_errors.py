@@ -114,7 +114,9 @@ class CycleConfigTest(unittest.TestCase):
             cycle(path)
 
     def test_a_repository_entry_needs_a_name(self):
-        path = self.write({"repos": [{"max_pages": 2}]})
+        path = self.write(
+            {"repos": [{"max_pages": 2}], "sync_db": str(self.root / "github.sqlite")}
+        )
         with self.assertRaises(ValueError):
             cycle(path)
 
