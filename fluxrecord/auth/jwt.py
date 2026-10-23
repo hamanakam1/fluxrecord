@@ -24,6 +24,7 @@ import secrets
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any
 
 __all__ = [
@@ -101,20 +102,36 @@ class Claims:
 
 
 class RevocationList:
-    """Token ids that must not be accepted again."""
+    """Token ids that must not be accepted again within this process.
+
+    Shared dispatchers use the same lock when revoking or consuming a token.
+    Ids are retained for the list's lifetime, including the expiry leeway.
+    """
 
     def __init__(self) -> None:
         self._revoked: set[str] = set()
+        self._lock = Lock()
 
     def revoke(self, token_id: str) -> None:
-        if token_id:
+        with self._lock:
+            if token_id:
+                self._revoked.add(token_id)
+
+    def consume(self, token_id: str) -> bool:
+        """Revoke a nonempty id atomically, returning whether it was unused."""
+        with self._lock:
+            if not token_id or token_id in self._revoked:
+                return False
             self._revoked.add(token_id)
+            return True
 
     def is_revoked(self, token_id: str) -> bool:
-        return token_id in self._revoked
+        with self._lock:
+            return token_id in self._revoked
 
     def __len__(self) -> int:
-        return len(self._revoked)
+        with self._lock:
+            return len(self._revoked)
 
 
 def issue(
@@ -178,6 +195,9 @@ def decode(token: str, secret: str | bytes, now: int | None = None) -> Claims:
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
         raise AuthError("missing subject")
+    token_id = payload.get("jti", "")
+    if not isinstance(token_id, str):
+        raise AuthError("invalid token id")
     issued = payload.get("iat")
     expires = payload.get("exp")
     if not isinstance(issued, int) or not isinstance(expires, int):
@@ -203,7 +223,7 @@ def decode(token: str, secret: str | bytes, now: int | None = None) -> Claims:
         expires_at=expires,
         issuer=str(payload.get("iss", "")),
         audience=str(payload.get("aud", "")),
-        token_id=str(payload.get("jti", "")),
+        token_id=token_id,
         token_type=str(payload.get("typ", "access")),
         scopes=tuple(str(payload.get("scope", "")).split()) if payload.get("scope") else (),
         extra={

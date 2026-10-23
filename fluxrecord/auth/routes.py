@@ -143,8 +143,12 @@ class AuthRoutes:
             return _problem(exc.status, "invalid-token", exc.reason)
         if claims.token_type != "refresh":
             return _problem(400, "invalid-request", "token is not a refresh token")
-        # Rotation: the old refresh token is spent the moment a new one is issued.
-        self.revoked.revoke(claims.token_id)
+        if not claims.token_id:
+            return _problem(401, "invalid-token", "missing token id")
+        # Verification alone cannot spend a token: another request may have
+        # verified it too. Consume on the shared list before issuing a pair.
+        if not self.revoked.consume(claims.token_id):
+            return _problem(401, "invalid-token", "token revoked")
         return Response(200, self._pair(claims.subject, claims.scopes))
 
     def revoke(self, body: Mapping[str, Any]) -> Response:
