@@ -1,5 +1,6 @@
 import hashlib
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,6 +83,158 @@ class GitHubSyncTest(unittest.TestCase):
         result = self.sync.poll("owner/repo")
         self.assertEqual(result["changed"], 1)
         self.assertIn("1", self.sync.status("owner/repo")["changed"])
+
+    def test_repeated_latest_revision_is_not_reported_as_changed(self):
+        self.sync.poll("owner/repo", kinds=["issues"])
+        self.gh.issues = [issue(1, state="closed")]
+        self.assertEqual(self.sync.poll("owner/repo", kinds=["issues"])["changed"], 1)
+        self.assertEqual(self.sync.poll("owner/repo", kinds=["issues"])["changed"], 0)
+
+    def test_current_revision_can_revert_without_losing_history(self):
+        with patch("fluxrecord.github_sync.time.time", return_value=1000):
+            self.sync._observe("owner/repo", "issues", issue(1))
+            self.assertTrue(self.sync._observe("owner/repo", "issues", issue(1, state="closed")))
+            self.assertTrue(self.sync._observe("owner/repo", "issues", issue(1)))
+            self.assertFalse(self.sync._observe("owner/repo", "issues", issue(1)))
+        current = self.sync.observations("owner/repo", latest_only=True)
+        self.assertEqual([row["status"] for row in current], ["open"])
+        self.assertEqual(len(self.sync.observations("owner/repo")), 2)
+        self.sync.close()
+        self.sync = GitHubSync(self.path, runner=self.gh)
+        self.assertEqual(self.sync.observations("owner/repo", latest_only=True), current)
+
+    def test_latest_limit_is_applied_after_revisions_are_collapsed(self):
+        self.sync._observe("owner/repo", "issues", issue(2))
+        for version in range(5):
+            self.sync._observe("owner/repo", "issues", issue(1, title=f"revision {version}"))
+        self.sync._observe("elsewhere/repo", "issues", issue(1))
+        self.sync._observe("owner/repo", "pulls", issue(1))
+        current = self.sync.observations("owner/repo", kind="issues", limit=2, latest_only=True)
+        self.assertEqual({row["identity"] for row in current}, {"1", "2"})
+        self.assertEqual(len(current), 2)
+        self.assertEqual(len(self.sync.observations("owner/repo", kind="issues")), 6)
+
+    def test_observation_and_current_pointer_roll_back_together(self):
+        # A synthetic write failure after the historical insert must not leave
+        # an observation that cannot be read through the current-state view.
+        self.sync.db.execute(
+            "CREATE TRIGGER fail_head BEFORE INSERT ON observation_heads "
+            "BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END"
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.sync._observe("owner/repo", "issues", issue(1))
+        self.assertEqual(self.sync.observations("owner/repo"), [])
+        self.assertEqual(self.sync.observations("owner/repo", latest_only=True), [])
+
+    def test_legacy_history_remains_unchanged_and_needs_a_refresh_for_intake(self):
+        from fluxrecord.github_sync import _revision
+
+        path = Path(self.temp.name) / "legacy.sqlite"
+        with sqlite3.connect(path) as legacy:
+            legacy.execute(
+                "CREATE TABLE observations (repo TEXT, kind TEXT, identity TEXT, "
+                "revision TEXT, observed REAL, summary TEXT, action TEXT, url TEXT, "
+                "ticket TEXT, actor TEXT, status TEXT, PRIMARY KEY(repo,kind,identity,revision))"
+            )
+            legacy.executemany(
+                "INSERT INTO observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        "owner/repo",
+                        "issues",
+                        "1",
+                        revision,
+                        1000,
+                        "Issue",
+                        "review_external_feedback",
+                        "",
+                        None,
+                        "",
+                        status,
+                    )
+                    for revision, status in [
+                        (_revision(issue(1, state=status)), status) for status in ("open", "closed")
+                    ]
+                ],
+            )
+            original = legacy.execute("SELECT * FROM observations ORDER BY rowid").fetchall()
+        for _ in range(2):
+            with GitHubSync(path, runner=self.gh) as migrated:
+                current = migrated.observations("owner/repo", latest_only=True)
+                self.assertEqual(current, [])
+                rows = migrated.db.execute("SELECT * FROM observations ORDER BY rowid").fetchall()
+                self.assertEqual([tuple(row) for row in rows], original)
+        with GitHubSync(path, runner=self.gh) as migrated:
+            self.assertFalse(migrated._observe("owner/repo", "issues", issue(1, state="closed")))
+            self.assertEqual(
+                [row["status"] for row in migrated.observations("owner/repo", latest_only=True)],
+                ["closed"],
+            )
+            self.assertEqual(len(migrated.observations("owner/repo")), 2)
+
+    def test_fresh_observation_fills_missing_legacy_status_for_intake(self):
+        from fluxrecord.core import Ledger
+        from fluxrecord.github_sync import _revision
+        from fluxrecord.intake import intake
+
+        path = Path(self.temp.name) / "before-status.sqlite"
+        with sqlite3.connect(path) as legacy:
+            legacy.execute(
+                "CREATE TABLE observations (repo TEXT, kind TEXT, identity TEXT, "
+                "revision TEXT, observed REAL, summary TEXT, action TEXT, url TEXT, "
+                "ticket TEXT, actor TEXT, PRIMARY KEY(repo,kind,identity,revision))"
+            )
+            legacy.execute(
+                "INSERT INTO observations VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    "owner/repo",
+                    "issues",
+                    "1",
+                    _revision(issue(1)),
+                    1000,
+                    "Original summary",
+                    "review_external_feedback",
+                    "",
+                    None,
+                    "octo",
+                ),
+            )
+        with (
+            GitHubSync(path, runner=self.gh) as migrated,
+            Ledger(Path(self.temp.name) / "intake.sqlite") as ledger,
+        ):
+            self.assertEqual(migrated.observations("owner/repo", latest_only=True), [])
+            self.assertFalse(migrated._observe("owner/repo", "issues", issue(1)))
+            current = migrated.observations("owner/repo", latest_only=True)
+            self.assertEqual(current[0]["status"], "open")
+            self.assertEqual(current[0]["summary"], "Original summary")
+            self.assertEqual(current[0]["observed"], 1000)
+            self.assertEqual(len(migrated.observations("owner/repo")), 1)
+            self.assertEqual(intake(ledger, migrated, "owner/repo")["created_count"], 1)
+
+    def test_poll_requests_all_issue_and_pull_states_on_each_page(self):
+        for kind in ("issues", "pulls"):
+            with self.subTest(kind=kind):
+                runner = Mock(side_effect=[[issue(n) for n in range(1, 101)], []])
+                self.sync._run = runner
+                self.sync.poll("owner/repo", kinds=[kind])
+                paths = [call.args[0][1] for call in runner.call_args_list]
+                self.assertEqual(
+                    paths,
+                    [
+                        f"repos/owner/repo/{kind}?per_page=100&state=all&sort=updated&direction=desc",
+                        f"repos/owner/repo/{kind}?per_page=100&page=2&state=all&sort=updated&direction=desc",
+                    ],
+                )
+
+    def test_a_reverted_revision_is_ordered_by_its_latest_transition(self):
+        with patch("fluxrecord.github_sync.time.time", side_effect=[1000, 1001, 1002, 1003]):
+            self.sync._observe("owner/repo", "issues", issue(1))
+            self.sync._observe("owner/repo", "issues", issue(1, state="closed"))
+            self.sync._observe("owner/repo", "issues", issue(2))
+            self.sync._observe("owner/repo", "issues", issue(1))
+        current = self.sync.observations("owner/repo", latest_only=True, limit=1)
+        self.assertEqual(current[0]["identity"], "1")
 
     def test_status_surfaces_ticket_references(self):
         self.sync.poll("owner/repo")

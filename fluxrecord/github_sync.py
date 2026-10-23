@@ -84,6 +84,10 @@ CREATE TABLE IF NOT EXISTS observations (
     action TEXT NOT NULL, url TEXT NOT NULL DEFAULT '',
     ticket TEXT, actor TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (repo, kind, identity, revision));
+CREATE TABLE IF NOT EXISTS observation_heads (
+    repo TEXT NOT NULL, kind TEXT NOT NULL, identity TEXT NOT NULL,
+    revision TEXT NOT NULL, updated REAL NOT NULL,
+    PRIMARY KEY (repo, kind, identity));
 CREATE TABLE IF NOT EXISTS outbox (
     repo TEXT NOT NULL, issue INTEGER NOT NULL, key TEXT NOT NULL,
     body_hash TEXT NOT NULL, marker TEXT NOT NULL, state TEXT NOT NULL,
@@ -264,31 +268,54 @@ class GitHubSync:
         if not identity:
             return False
         revision = _revision(record)
-        known = self.db.execute(
-            "SELECT revision FROM observations WHERE repo=? AND kind=? AND identity=?",
-            (repo, kind, identity),
-        ).fetchall()
-        changed = any(row["revision"] != revision for row in known)
+        status = _status(kind, record)
         actor = record.get("user") or record.get("actor") or {}
         login = actor.get("login", "") if isinstance(actor, dict) else ""
-        self.db.execute(
-            "INSERT OR IGNORE INTO observations"
-            "(repo,kind,identity,revision,observed,summary,action,url,ticket,actor,status)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                repo,
-                kind,
-                identity,
-                revision,
-                time.time(),
-                _summary(kind, record),
-                ACTIONS[kind],
-                str(record.get("html_url", "")),
-                _ticket_ref(record),
-                login,
-                _status(kind, record),
-            ),
-        )
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            known = self.db.execute(
+                "SELECT revision FROM observation_heads WHERE repo=? AND kind=? AND identity=?",
+                (repo, kind, identity),
+            ).fetchone()
+            changed = known is not None and known["revision"] != revision
+            now = time.time()
+            self.db.execute(
+                "INSERT OR IGNORE INTO observations"
+                "(repo,kind,identity,revision,observed,summary,action,url,ticket,actor,status)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    repo,
+                    kind,
+                    identity,
+                    revision,
+                    now,
+                    _summary(kind, record),
+                    ACTIONS[kind],
+                    str(record.get("html_url", "")),
+                    _ticket_ref(record),
+                    login,
+                    status,
+                ),
+            )
+            if status:
+                # Older databases gained an empty status column on upgrade.
+                # A fresh matching revision can fill that absent metadata.
+                self.db.execute(
+                    "UPDATE observations SET status=? WHERE repo=? AND kind=?"
+                    " AND identity=? AND revision=? AND status=''",
+                    (status, repo, kind, identity, revision),
+                )
+            if known is None or changed:
+                self.db.execute(
+                    "INSERT INTO observation_heads(repo,kind,identity,revision,updated)"
+                    " VALUES (?,?,?,?,?) ON CONFLICT(repo,kind,identity) DO UPDATE SET"
+                    " revision=excluded.revision, updated=excluded.updated",
+                    (repo, kind, identity, revision, now),
+                )
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
         return changed
 
     def poll(
@@ -312,6 +339,8 @@ class GitHubSync:
             endpoint = _ENDPOINTS[kind].format(repo=repo)
             for page in range(1, max_pages + 1):
                 query = "per_page=100" if page == 1 else f"per_page=100&page={page}"
+                if kind in ("issues", "pulls"):
+                    query += "&state=all&sort=updated&direction=desc"
                 payload = self._run(["api", f"{endpoint}?{query}"])
                 if kind == "runs" and isinstance(payload, dict):
                     payload = payload.get("workflow_runs")
@@ -344,17 +373,25 @@ class GitHubSync:
         kind: str | None = None,
         action: str | None = None,
         limit: int = 200,
+        latest_only: bool = False,
     ) -> list[dict[str, Any]]:
-        """What has been observed for a repository, newest first."""
-        query = "SELECT * FROM observations WHERE repo=?"
+        """Historical revisions, or each object's latest observed revision."""
+        query = "SELECT o.* FROM observations o"
+        if latest_only:
+            query += (
+                " JOIN observation_heads h ON o.repo=h.repo AND o.kind=h.kind"
+                " AND o.identity=h.identity AND o.revision=h.revision"
+            )
+        query += " WHERE o.repo=?"
         params: list[Any] = [repo]
         if kind:
-            query += " AND kind=?"
+            query += " AND o.kind=?"
             params.append(kind)
         if action:
-            query += " AND action=?"
+            query += " AND o.action=?"
             params.append(action)
-        query += " ORDER BY observed DESC, kind, identity LIMIT ?"
+        ordering = "h.updated" if latest_only else "o.observed"
+        query += f" ORDER BY {ordering} DESC, o.kind, o.identity LIMIT ?"
         params.append(limit)
         return [dict(row) for row in self.db.execute(query, params)]
 

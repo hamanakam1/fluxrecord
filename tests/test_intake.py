@@ -119,6 +119,35 @@ class IntakeTest(unittest.TestCase):
         result = intake(self.ledger, self.sync, "owner/repo")
         self.assertEqual(result["created_count"], 0)
 
+    def test_resolved_observations_do_not_ticket_stale_revisions(self):
+        for kind, records in (
+            (
+                "issues",
+                [{"number": 12, "title": "Issue", "state": state} for state in ("open", "closed")],
+            ),
+            (
+                "runs",
+                [
+                    {"id": 5, "name": "checks", "conclusion": conclusion}
+                    for conclusion in ("failure", "success")
+                ],
+            ),
+        ):
+            with self.subTest(kind=kind):
+                for record in records:
+                    self.observe(kind, record)
+                result = intake(self.ledger, self.sync, "owner/repo", kinds=[kind])
+                self.assertEqual(result["created_count"], 0)
+                self.assertEqual(result["skipped_count"], 1)
+                self.assertEqual(len(self.sync.observations("owner/repo", kind=kind)), 2)
+
+    def test_reopened_issue_uses_only_the_latest_observed_revision(self):
+        for state in ("open", "closed", "open"):
+            self.observe("issues", {"number": 12, "title": "Issue", "state": state})
+        result = intake(self.ledger, self.sync, "owner/repo", kinds=["issues"])
+        self.assertEqual(result["created_count"], 1)
+        self.assertEqual(result["skipped_count"], 0)
+
     def test_a_failed_run_becomes_a_ticket(self):
         self.observe(
             "runs",

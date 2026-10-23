@@ -131,7 +131,9 @@ def intake(
     selected = list(kinds) if kinds else list(KINDS)
     observations: list[dict[str, Any]] = []
     for kind in selected:
-        observations.extend(sync.observations(repo, kind=kind, limit=limit_per_kind))
+        observations.extend(
+            sync.observations(repo, kind=kind, limit=limit_per_kind, latest_only=True)
+        )
 
     per_kind: dict[str, int] = {}
     created: list[dict[str, str]] = []

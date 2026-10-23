@@ -250,6 +250,20 @@ comment, release, run, commit and event, each implying one of six actions.
 The `gh` CLI is the only way out — no token is read or stored anywhere, and
 every call is bounded by a 30 second timeout.
 
+Intake considers only the latest locally observed revision of each object,
+so a newer closed issue or successful run supersedes older actionable
+revisions. Historical revisions remain available through `observations()`;
+`latest_only=True` selects the current view. Issue and pull polling requests
+all states, ordered by the most recent update, using GitHub's documented
+[issue](https://docs.github.com/en/rest/issues/issues#list-repository-issues)
+and [pull request](https://docs.github.com/en/rest/pulls/pulls#list-pull-requests)
+filters. Absence from a bounded poll never implies closure.
+
+On upgrading an existing sync database, run `github-poll` for the kinds you
+want to intake first. The additive [current-observation migration](docs/github-sync-storage.md)
+preserves history and waits for fresh observations before making it eligible
+for intake.
+
 Writing is idempotent. A queued comment carries a
 `<!-- fluxrecord:{key}:{digest} -->` marker, and `publish` matches that
 marker before sending anything, so a retry confirms instead of

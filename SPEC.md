@@ -401,9 +401,21 @@ casual edits. It is evidence, not protection.
 ### Observations (Read-Only)
 ```sql
 observations(repo, kind, identity, revision, observed, summary, action, url)
+observation_heads(repo, kind, identity, revision, updated)
 ```
 - `kind`: `issues`, `comments`, `pulls`, `review_comments`, `releases`, `runs`, `commits`, `events`
 - `action`: `investigate_failed_check`, `review_code_change`, `reconcile_ticket_change`, `review_external_feedback`, `verify_release_artifacts`, `inspect_repository_activity`
+
+Historical observations retain distinct revisions and their first-observed
+timestamps. Each head identifies the latest locally observed revision for
+`(repo, kind, identity)`; history and head updates are atomic. Intake reads
+this current view, not superseded revisions. Returning to a previously seen
+revision moves the head without duplicating history. An unchanged revision
+does not count as changed on every subsequent poll.
+
+The head table starts empty when an older sync database is opened. A fresh
+observation establishes each object's current baseline; intake does not infer
+current state from old history. See [storage migration](docs/github-sync-storage.md).
 
 ### Outbox (Write Path)
 ```sql
