@@ -232,49 +232,94 @@ def intake_dashboard(
     The dashboard is another source of work, watched the same way a
     repository is. Each dashboard ticket becomes a ledger ticket seeded by
     the dashboard's own id, so reading the dashboard twice does not create
-    two tickets.
+    two tickets. New tasks retain a free compatible dashboard id or receive
+    a local id, and their scope includes the dashboard origin. Existing seed
+    mappings and scopes are left unchanged.
 
     Args:
         ledger: the Ledger to write into
         preview: the result of a dashboard preview
         url: the origin the preview came from, used in the scope
     """
+    from .core import validate_task
+
     origin = url or str(preview.get("origin", ""))
     created: list[dict[str, str]] = []
     skipped: list[dict[str, str]] = []
     seen = 0
+    prepared: list[tuple[str, str, dict[str, Any]]] = []
 
     for entry in preview.get("tickets", []):
         if not isinstance(entry, dict):
             continue
         seen += 1
-        external_id = str(entry.get("id", "")).strip()
-        title = str(entry.get("title", "")).strip() or external_id or "untitled"
+        raw_id = entry.get("id", "")
+        external_id = ""
+        if isinstance(raw_id, str) or (isinstance(raw_id, int) and not isinstance(raw_id, bool)):
+            external_id = str(raw_id).strip()
+        title = entry.get("title", "")
+        if isinstance(title, str):
+            title = title.strip() or external_id or "untitled"
         if not external_id:
-            skipped.append({"title": title, "reason": "no id in the dashboard record"})
+            reason = (
+                "no id in the dashboard record"
+                if raw_id is None or isinstance(raw_id, str)
+                else "dashboard id must be nonempty text or an integer"
+            )
+            skipped.append({"title": str(title), "reason": reason})
             continue
         status = str(entry.get("status", "")).strip().lower()
         key = f"dashboard:{origin}#{external_id}"
         if ledger.task_by_seed_key(key) is not None:
-            skipped.append({"title": title, "reason": "already seeded"})
+            skipped.append({"title": str(title), "reason": "already seeded"})
             continue
         priority = str(entry.get("priority", 2) or 2)
         try:
-            task = ledger.add_task(
-                external_id if _is_ticket_id(external_id) else ledger.next_ticket_id(),
-                title,
-                f"The dashboard ticket {external_id} is reconciled and its outcome is recorded.",
-                kind="code",
-                scope=[f"dashboard:{external_id}"],
-                title=title,
-                priority=int(priority) if priority.isdigit() else 2,
-                tags=sorted({"dashboard", status} - {""}),
-                owner=str(entry.get("owner", "")),
-                seed_key=key,
-            )
+            payload: dict[str, Any] = {
+                "task_id": external_id if _is_ticket_id(external_id) else "M-000001",
+                "objective": title,
+                "acceptance": (
+                    f"The dashboard ticket {external_id} is reconciled and its outcome is recorded."
+                ),
+                "kind": "code",
+                "scope": [key],
+                "title": title,
+                "priority": int(priority) if priority.isdigit() else 2,
+                "tags": sorted({"dashboard", status} - {""}),
+                "owner": str(entry.get("owner", "")),
+                "seed_key": key,
+            }
+            validate_task(**payload)
+        except ValueError as exc:
+            skipped.append({"title": str(title), "reason": str(exc)})
+            continue
+        prepared.append((external_id, status, payload))
+
+    # Validate before reserving IDs: malformed rows cannot take an identifier
+    # from a later valid row. Read identities without reconciling ledger state.
+    occupied = {str(row["id"]) for row in ledger.db.execute("SELECT id FROM tasks")}
+    reserved = occupied | {
+        external_id for external_id, _, _ in prepared if _is_ticket_id(external_id)
+    }
+    for external_id, status, payload in prepared:
+        key = payload["seed_key"]
+        title = payload["title"]
+        if ledger.task_by_seed_key(key) is not None:
+            skipped.append({"title": title, "reason": "already seeded"})
+            continue
+        task_id = external_id
+        if not _is_ticket_id(task_id) or task_id in occupied:
+            task_id = ledger.next_ticket_id()
+            while task_id in reserved:
+                task_id = f"M-{int(task_id[2:]) + 1:06d}"
+        payload["task_id"] = task_id
+        try:
+            task = ledger.add_task(**payload)
         except ValueError as exc:
             skipped.append({"title": title, "reason": str(exc)})
             continue
+        occupied.add(task_id)
+        reserved.add(task_id)
         created.append({"ticket": task["id"], "key": key, "status": status})
 
     return {

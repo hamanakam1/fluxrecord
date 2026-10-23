@@ -351,6 +351,15 @@ is. `flux dashboard-intake` reads the local dashboard and gives each of
 its tickets a ledger ticket, seeded by the dashboard's own id so reading it
 twice does not create two tickets.
 
+Source IDs must be nonempty text or integers (excluding booleans). Intake
+keeps a compatible ID when it is free and allocates a local ID for collisions
+or incompatible IDs. It reserves valid incoming IDs before allocating, so
+an earlier row cannot consume a later row's ID. Repeated intake follows the
+existing origin-and-ID seed mapping. New task scopes include the configured
+origin; existing mappings and scopes are preserved. Use the same origin
+spelling on repeat imports and run one intake at a time. The combined seed
+remains limited to 100 characters; oversized records are reported as skipped.
+
 ```bash
 flux dashboard-intake --url http://127.0.0.1:8080
 ```

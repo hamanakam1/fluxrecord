@@ -33,7 +33,7 @@ class DashboardIntakeTest(unittest.TestCase):
         self.assertEqual(result["seen"], 3)
         ticket = self.ledger.task_view("M-500001")
         self.assertEqual(ticket["title"], "Dashboard item")
-        self.assertEqual(ticket["scope"], ["dashboard:M-500001"])
+        self.assertEqual(ticket["scope"], ["dashboard:http://127.0.0.1:8080#M-500001"])
         self.assertIn("dashboard", ticket["tags"])
         self.assertIn("planned", ticket["tags"])
 
