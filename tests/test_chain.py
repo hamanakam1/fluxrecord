@@ -108,6 +108,13 @@ class ChainTest(unittest.TestCase):
         finally:
             empty.close()
 
+    def test_an_empty_unsigned_ledger_verifies_without_claiming_a_signature(self):
+        with Ledger(Path(self.temp.name) / "empty-unsigned.sqlite") as empty:
+            report = empty.verify_chain()
+        self.assertFalse(report["signed"])
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["events"], 0)
+
     # ----------------------------------------------------------------- bad
 
     def test_an_edited_event_breaks_the_chain(self):
@@ -148,6 +155,15 @@ class ChainTest(unittest.TestCase):
         self.tamper("DELETE FROM events WHERE seq > 2")
         report = self.ledger.verify_chain()
         self.assertFalse(report["ok"])
+        self.assertIn("no longer ends", report["note"])
+
+    def test_a_completely_truncated_log_is_detected(self):
+        """An empty log must still match the last recorded signed head."""
+        self.tamper("DELETE FROM events")
+        report = self.ledger.verify_chain()
+        self.assertTrue(report["signed"])
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["events"], 0)
         self.assertIn("no longer ends", report["note"])
 
     def test_the_head_is_reported_so_it_can_be_pinned(self):
@@ -245,6 +261,20 @@ class VerifyCommandTest(unittest.TestCase):
         result = self.flux("verify", expect=2)
         report = json.loads(result.stdout)
         self.assertFalse(report["ok"])
+
+    def test_a_completely_truncated_chain_fails_the_command(self):
+        self.flux("task-add", "M-1", "--objective", "o", "--acceptance", "a", "--scope", "s")
+        database = sqlite3.connect(self.db)
+        try:
+            database.execute("DELETE FROM events")
+            database.commit()
+        finally:
+            database.close()
+        result = self.flux("verify", expect=2)
+        report = json.loads(result.stdout)
+        self.assertTrue(report["signed"])
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["events"], 0)
 
     def test_an_unsigned_ledger_passes_unless_signed_is_asked_for(self):
         self.flux("init", "--project", ".fluxrecord", key=None)

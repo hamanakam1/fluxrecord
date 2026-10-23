@@ -314,12 +314,18 @@ class Ledger:
         """
         events = self.db.execute("SELECT * FROM events ORDER BY seq").fetchall()
         if not events:
-            return {
+            # A fresh log has no recorded head. A log emptied after signing
+            # still has one, so removing every event is a truncation too.
+            report: dict[str, Any] = {
                 "signed": self.chain_key is not None,
-                "ok": True,
+                "ok": self.chain_key is None or self._head_matches(events),
                 "events": 0,
                 "broken_at": None,
             }
+            if not report["ok"]:
+                report["head"] = ""
+                report["note"] = self._head_note(events)
+            return report
         if self.chain_key is None:
             return {
                 "signed": False,
