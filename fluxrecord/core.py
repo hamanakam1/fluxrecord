@@ -1393,7 +1393,7 @@ class Ledger:
                 "expires": row["expires"],
             }
             for row in self.db.execute(
-                "SELECT t.hash,t.source,t.priority,t.expires,LENGTH(c.body) AS bytes"
+                "SELECT t.hash,t.source,t.priority,t.expires,LENGTH(CAST(c.body AS BLOB)) AS bytes"
                 " FROM task_context t JOIN contexts c ON c.hash=t.hash"
                 " WHERE t.task_id=? ORDER BY t.priority DESC,t.hash",
                 (task_id,),

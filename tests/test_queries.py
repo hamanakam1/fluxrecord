@@ -173,6 +173,20 @@ class ShowTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.ledger.show("M-999")
 
+    def test_context_metadata_reports_utf8_bytes_without_returning_bodies(self):
+        for body in ("ASCII", "界🚀", "a\x00b"):
+            with self.subTest(body=body):
+                attached = self.ledger.add_context("M-1", body, "synthetic reference")
+                expected_bytes = len(body.encode("utf-8"))
+                self.assertEqual(attached["bytes"], expected_bytes)
+                for entries in (
+                    self.ledger.context_of("M-1"),
+                    self.ledger.show("M-1")["context"],
+                ):
+                    entry = next(row for row in entries if row["hash"] == attached["hash"])
+                    self.assertEqual(entry["bytes"], expected_bytes)
+                    self.assertNotIn("body", entry)
+
 
 class PacketTest(unittest.TestCase):
     def setUp(self):
