@@ -470,6 +470,12 @@ flux handoff <session_id> --to terminal-2 --reason "going home"
 flux adopt <session_id> --owner terminal-2 --reason "the old worker is gone"
 ```
 
+Starting, handing off, or adopting a session updates the ticket's owner in
+the same transaction. The last worker remains visible during review or
+after a blocked attempt. Retrying with a new worker updates the ticket
+while retaining earlier sessions and their usage. Existing owner mismatches
+are corrected on the next successful start, handoff, or adoption.
+
 Both are recorded in the event log, with the reason, because a lease that
 changes hands without a reason is one nobody can explain later.
 
