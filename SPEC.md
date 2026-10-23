@@ -414,6 +414,11 @@ outbox(repo, issue, key, body_hash, state, url)
   Errors, malformed pages and a full final page at the cap leave the row
   unresolved. Reconciliation uses the same lookup and never resends.
 - Failed publication attempts remain pending and count toward `pending`.
+- State, marker and receipt updates are conditional on the attempted body
+  hash and prior state. A superseded attempt cannot complete a replacement.
+  `sent` records successful POST attempts; `pending` counts current rows,
+  including replacements or new keys queued during transport. A changed
+  body clears the prior body's URL.
 - Run one publisher at a time. Marker discovery and posting are separate
   requests; concurrent publication and changes between pages are not an
   exactly-once delivery guarantee.

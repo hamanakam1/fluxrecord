@@ -280,6 +280,12 @@ page, or reaching the cap without finding a marker or the end of the list,
 leaves the comment pending. Failed attempts remain included in the reported
 pending count. Reconciliation uses the same bounded lookup.
 
+Outbox replies update only the body and state that the attempt originally
+read. If a new body is queued under the same key during publication or
+reconciliation, it remains pending with its own marker. A successful old
+POST still appears in `sent`; `pending` counts current database rows, so
+both can describe the same key. Replacing a body clears its previous URL.
+
 This supports retries after an interrupted publication. Run one publisher
 at a time: lookup and posting are separate requests, and GitHub comment
 pages are not a consistent snapshot during concurrent edits or deletions.

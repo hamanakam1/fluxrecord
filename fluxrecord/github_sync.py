@@ -426,6 +426,7 @@ class GitHubSync:
             " VALUES (?,?,?,?,?,'pending','',?,?,?)"
             " ON CONFLICT(repo,issue,key) DO UPDATE SET"
             " body_hash=excluded.body_hash, marker=excluded.marker, body=excluded.body,"
+            " url=CASE WHEN outbox.body_hash=excluded.body_hash THEN outbox.url ELSE '' END,"
             " state='pending', updated=excluded.updated",
             (repo, issue, key, digest, marker, body, now, now),
         )
@@ -482,8 +483,8 @@ class GitHubSync:
                 failed.append(row["key"])
                 continue
             if found:
-                self._set_state(repo, int(row["issue"]), row["key"], "confirmed")
-                confirmed.append(row["key"])
+                if self._set_state(row, "confirmed"):
+                    confirmed.append(row["key"])
                 continue
             body = f"{row['body']}\n\n{marker}"
             try:
@@ -496,14 +497,19 @@ class GitHubSync:
             url = ""
             if isinstance(response, dict):
                 url = str(response.get("html_url", ""))
-            self._set_state(repo, int(row["issue"]), row["key"], "sent", url, marker)
+            self._set_state(row, "sent", url, marker)
+            # A successful POST describes this attempt, even if another
+            # connection has since queued a replacement under the same key.
             sent.append(row["key"])
+        pending = self.db.execute(
+            "SELECT COUNT(*) FROM outbox WHERE repo=? AND state='pending'", (repo,)
+        ).fetchone()[0]
         return {
             "repo": repo,
             "sent": sent,
             "confirmed": confirmed,
             "failed": failed,
-            "pending": len(rows) - len(sent) - len(confirmed),
+            "pending": pending,
             "note": "Comments carry a retry marker; incomplete lookups remain pending.",
         }
 
@@ -522,8 +528,7 @@ class GitHubSync:
             except OSError:
                 missing.append(row["key"])
                 continue
-            if found:
-                self._set_state(repo, int(row["issue"]), row["key"], "confirmed")
+            if found and self._set_state(row, "confirmed"):
                 confirmed.append(row["key"])
             else:
                 missing.append(row["key"])
@@ -536,27 +541,30 @@ class GitHubSync:
 
     def _set_state(
         self,
-        repo: str,
-        issue: int,
-        key: str,
+        row: sqlite3.Row,
         state: str,
         url: str | None = None,
         marker: str | None = None,
-    ) -> None:
-        if url is None:
-            self.db.execute(
-                "UPDATE outbox SET state=?, updated=? WHERE repo=? AND issue=? AND key=?",
-                (state, time.time(), repo, issue, key),
-            )
-        else:
-            self.db.execute(
-                "UPDATE outbox SET state=?, url=?, updated=? WHERE repo=? AND issue=? AND key=?",
-                (state, url, time.time(), repo, issue, key),
-            )
-        if marker is not None:
-            # The stored marker records what was actually written, so a row
-            # queued before the namespace was renamed says so.
-            self.db.execute(
-                "UPDATE outbox SET marker=? WHERE repo=? AND issue=? AND key=?",
-                (marker, repo, issue, key),
-            )
+    ) -> bool:
+        """Apply a result only to the payload and state this attempt read.
+
+        The state, receipt and marker change together. A reply from an old
+        attempt must not overwrite a replacement queued during transport.
+        No transaction or write lock is held while calling GitHub.
+        """
+        result = self.db.execute(
+            "UPDATE outbox SET state=?, url=COALESCE(?,url), marker=COALESCE(?,marker), updated=?"
+            " WHERE repo=? AND issue=? AND key=? AND body_hash=? AND state=?",
+            (
+                state,
+                url,
+                marker,
+                time.time(),
+                row["repo"],
+                row["issue"],
+                row["key"],
+                row["body_hash"],
+                row["state"],
+            ),
+        )
+        return result.rowcount == 1
