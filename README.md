@@ -258,6 +258,20 @@ comment, release, run, commit and event, each implying one of six actions.
 The `gh` CLI is the only way out — no token is read or stored anywhere, and
 every call is bounded by a 30 second timeout.
 
+Workflow-run polling reads the `workflow_runs` array in GitHub's
+[repository workflow-runs response](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository).
+Malformed run envelopes fail the poll instead of appearing as an empty
+result. Injected runners may also return bare run lists for compatibility.
+Fixtures cover pagination and failed-run intake; they do not verify a live
+`gh` installation. No `gh` release or REST API version is pinned.
+
+Access comes from the operator's `gh` login and repository permissions.
+Workflow reads require Actions read permission for restricted repositories;
+comment publication requires permission to write issue comments. Calls
+report observations and outbox outcomes, not provider billing. Each call
+has its own timeout; a multi-page cycle has no aggregate deadline, and
+interrupting a write does not prove that GitHub rejected it.
+
 A queued comment carries a `<!-- fluxrecord:{key}:{digest} -->` marker.
 Before sending it, `publish` searches up to 20 pages of 100 issue comments
 for that marker, including the legacy `taskrivet` namespace. A matching

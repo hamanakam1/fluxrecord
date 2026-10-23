@@ -314,6 +314,15 @@ class GitHubSync:
             for page in range(1, max_pages + 1):
                 query = "per_page=100" if page == 1 else f"per_page=100&page={page}"
                 payload = self._run(["api", f"{endpoint}?{query}"])
+                if kind == "runs":
+                    # GitHub wraps run pages; injected runners may still use
+                    # the bare list accepted by earlier versions.
+                    if isinstance(payload, dict):
+                        payload = payload.get("workflow_runs")
+                    if not isinstance(payload, list):
+                        raise OSError("GitHub workflow runs response must contain a list")
+                    if any(not isinstance(record, dict) for record in payload):
+                        raise OSError("GitHub workflow runs response must contain objects")
                 if not isinstance(payload, list) or not payload:
                     break
                 for record in payload:
