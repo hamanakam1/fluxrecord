@@ -48,7 +48,10 @@
 
 ### Ticket Files
 - Ticket ids are plain identifiers, so an id cannot walk out of the project
-- Every exported path is resolved and checked against its directory
+- The selected project root is resolved once; child directories are opened relative to directory descriptors without following symlinks
+- Existing output symlinks are refused; atomic file replacement never writes through existing hardlinked inodes
+- File exports require no-follow and directory-relative filesystem support; unsupported platforms fail closed
+- Replacement is atomic per file, not across an entire export; root and ancestor directory ownership remains trusted
 
 ### Secrets
 - Never in repo

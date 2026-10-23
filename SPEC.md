@@ -417,6 +417,14 @@ outbox(repo, issue, key, body_hash, state, url)
 `flux export` writes this layout. The ledger remains the source of truth;
 these files are a projection of it, not a second copy of the state.
 
+The reference implementation rejects output symlinks beneath the explicitly
+selected project root. It writes UTF-8 files by atomic replacement, leaving
+external hardlinked inodes unchanged. The index is replaced last; an export
+is not a transaction across all its files. File creation requires no-follow
+directory opens and directory-relative filesystem operations (Linux/macOS),
+and fails closed where those operations are unavailable. The selected root
+and its ancestors are trusted; moving open directories is not prevented.
+
 ```
 .fluxrecord/
 ├── tickets/

@@ -21,7 +21,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import secrets
+import stat
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -48,13 +53,89 @@ TICKET_FIELDS = (
 _LIST_FIELDS = ("scope", "tags", "depends_on", "blocks")
 
 
-def _inside(directory: Path, name: str) -> Path:
-    """Resolve a name inside a directory, refusing anything that escapes it."""
-    candidate = (directory / name).resolve()
-    base = directory.resolve()
-    if candidate != base and base not in candidate.parents:
-        raise ValueError(f"refusing to write outside {base}: {name}")
-    return candidate
+# os.replace accepts directory descriptors wherever os.rename does, but is
+# not itself listed in supports_dir_fd on every supported Python platform.
+_SECURE_WRITES = (
+    hasattr(os, "O_DIRECTORY")
+    and hasattr(os, "O_NOFOLLOW")
+    and all(fn in os.supports_dir_fd for fn in (os.open, os.mkdir, os.stat, os.rename, os.unlink))
+    and os.stat in os.supports_follow_symlinks
+)
+
+
+def _component(name: str) -> None:
+    if not name or name in (".", "..") or any(char in name for char in ("/", "\\", "\0")):
+        raise ValueError(f"refusing unsafe output path component: {name!r}")
+
+
+@contextmanager
+def _project(root: Path) -> Iterator[int]:
+    if not _SECURE_WRITES:
+        raise OSError(
+            "safe exports require directory-relative filesystem operations with no-follow support"
+        )
+    # The caller resolves the explicitly selected root once. Everything below
+    # that boundary is opened through directory descriptors without following links.
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def _directory(parent: int, name: str) -> Iterator[int]:
+    _component(name)
+    try:
+        os.mkdir(name, mode=0o700, dir_fd=parent)
+    except FileExistsError:
+        pass
+    # Check for a useful error, then enforce the same rule atomically at open.
+    if not stat.S_ISDIR(os.stat(name, dir_fd=parent, follow_symlinks=False).st_mode):
+        raise ValueError(f"refusing non-directory or symlink output directory: {name}")
+    descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+def _regular_file(directory: int, name: str) -> bool:
+    _component(name)
+    try:
+        mode = os.stat(name, dir_fd=directory, follow_symlinks=False).st_mode
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISREG(mode):
+        raise ValueError(f"refusing non-regular or symlink output file: {name}")
+    return True
+
+
+def _write_text(directory: int, name: str, text: str) -> None:
+    """Replace one complete UTF-8 file without writing through any existing inode."""
+    _regular_file(directory, name)
+    temporary = f".fluxrecord-{secrets.token_hex(16)}.tmp"
+    descriptor = os.open(
+        temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory
+    )
+    try:
+        try:
+            handle = os.fdopen(descriptor, "w", encoding="utf-8", newline="\n")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        with handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _regular_file(directory, name)
+        os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=directory)
+        except FileNotFoundError:
+            pass
 
 
 def _stamp(value: Any) -> str:
@@ -258,12 +339,12 @@ def scaffold(project_dir: str | Path) -> dict[str, Any]:
     root = Path(project_dir).expanduser()
     tickets = root / "tickets"
     evidence = root / "evidence"
-    tickets.mkdir(parents=True, exist_ok=True, mode=0o700)
-    evidence.mkdir(parents=True, exist_ok=True, mode=0o700)
     index = root / "index.json"
-    created = not index.exists()
-    if created:
-        index.write_text("{}\n")
+    with _project(root.resolve()) as directory:
+        with _directory(directory, "tickets"), _directory(directory, "evidence"):
+            created = not _regular_file(directory, "index.json")
+            if created:
+                _write_text(directory, "index.json", "{}\n")
     return {
         "project": str(root),
         "tickets": str(tickets),
@@ -273,55 +354,81 @@ def scaffold(project_dir: str | Path) -> dict[str, Any]:
     }
 
 
+def _evidence_files(evidence: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    for number, checkpoint in enumerate(evidence["checkpoints"], 1):
+        payload = {
+            "session_id": checkpoint["session_id"],
+            "sequence": number,
+            "summary": checkpoint["summary"],
+            "evidence": checkpoint["evidence"],
+            "next_step": checkpoint["next_step"],
+            "tokens": checkpoint["tokens"],
+            "created_at": _stamp(checkpoint["created"]),
+            "evidence_hash": "sha256:"
+            + hashlib.sha256(str(checkpoint["evidence"]).encode()).hexdigest(),
+        }
+        yield f"checkpoint-{number}.json", json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    for event in evidence["events"]:
+        if event.get("type") == "session.finished":
+            yield (
+                "finish.json",
+                json.dumps(event.get("data", {}), indent=2, ensure_ascii=False) + "\n",
+            )
+            break
+
+
 def export(ledger: Any, project_dir: str | Path) -> dict[str, Any]:
-    """Write every ticket and its evidence into the project directory."""
+    """Write every ticket and its evidence into the project directory.
+
+    Each file is replaced atomically; the full export is not a transaction.
+    Existing output symlinks are refused and hardlinked inodes are never changed.
+    """
     root = Path(project_dir).expanduser()
-    layout = scaffold(root)
-    tasks = ledger.status()["tasks"]
+    resolved_root = root.resolve()
     index: dict[str, Any] = {}
     written: list[str] = []
-    for task in tasks:
-        task_id = str(task["id"])
-        evidence = ledger.evidence(task_id)
-        ticket_path = _inside(root / "tickets", f"{task_id}.md")
-        ticket_path.write_text(render_ticket(task, evidence))
-        written.append(str(ticket_path))
-
-        folder = _inside(root / "evidence", task_id)
-        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-        for number, checkpoint in enumerate(evidence["checkpoints"], 1):
-            payload = {
-                "session_id": checkpoint["session_id"],
-                "sequence": number,
-                "summary": checkpoint["summary"],
-                "evidence": checkpoint["evidence"],
-                "next_step": checkpoint["next_step"],
-                "tokens": checkpoint["tokens"],
-                "created_at": _stamp(checkpoint["created"]),
-                "evidence_hash": "sha256:"
-                + hashlib.sha256(str(checkpoint["evidence"]).encode()).hexdigest(),
-            }
-            (folder / f"checkpoint-{number}.json").write_text(
-                json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    with _project(resolved_root) as directory:
+        tasks = ledger.status()["tasks"]
+        with (
+            _directory(directory, "tickets") as tickets,
+            _directory(directory, "evidence") as evidence_dir,
+        ):
+            # Refuse all existing unsafe paths before replacing any projection file.
+            _regular_file(directory, "index.json")
+            for task in tasks:
+                task_id = str(task["id"])
+                _component(task_id)
+                evidence = ledger.evidence(task_id)
+                _regular_file(tickets, f"{task_id}.md")
+                with _directory(evidence_dir, task_id) as folder:
+                    for number in range(1, len(evidence["checkpoints"]) + 1):
+                        _regular_file(folder, f"checkpoint-{number}.json")
+                    if any(event.get("type") == "session.finished" for event in evidence["events"]):
+                        _regular_file(folder, "finish.json")
+            # Keep only one task's evidence in memory. Every actual write checks
+            # its destination again, including evidence added since preflight.
+            for task in tasks:
+                task_id = str(task["id"])
+                evidence = ledger.evidence(task_id)
+                _write_text(tickets, f"{task_id}.md", render_ticket(task, evidence))
+                written.append(str(resolved_root / "tickets" / f"{task_id}.md"))
+                with _directory(evidence_dir, task_id) as folder:
+                    for name, text in _evidence_files(evidence):
+                        _write_text(folder, name, text)
+                index[task_id] = {
+                    "title": task.get("title", ""),
+                    "status": task.get("status", ""),
+                    "priority": task.get("priority", 2),
+                    "owner": task.get("owner", ""),
+                    "updated_at": _stamp(task.get("updated_at")),
+                }
+            _write_text(
+                directory, "index.json", json.dumps(index, indent=2, ensure_ascii=False) + "\n"
             )
-        for event in evidence["events"]:
-            if event.get("type") == "session.finished":
-                (folder / "finish.json").write_text(
-                    json.dumps(event.get("data", {}), indent=2, ensure_ascii=False) + "\n"
-                )
-                break
-        index[task_id] = {
-            "title": task.get("title", ""),
-            "status": task.get("status", ""),
-            "priority": task.get("priority", 2),
-            "owner": task.get("owner", ""),
-            "updated_at": _stamp(task.get("updated_at")),
-        }
-    (root / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False) + "\n")
     return {
-        "project": layout["project"],
+        "project": str(root),
         "tasks": len(tasks),
         "files": written,
-        "index": layout["index"],
+        "index": str(root / "index.json"),
         "note": "Files are a projection of the ledger; the ledger remains the source of truth.",
     }

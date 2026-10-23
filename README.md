@@ -541,6 +541,18 @@ tool that does not share the ledger can still read a ticket. The front
 matter is the frozen shape of the file, and it is validated against the
 published schema like everything else.
 
+Exports reject symlinks below the chosen project directory and replace each
+UTF-8 file atomically, so an existing hardlink cannot redirect content writes
+and a failed replacement preserves the previous file. The index is written
+last; the complete export is not one transaction and can be rerun after a
+failure. The chosen root may itself be a symlink.
+
+Safe file creation requires directory-relative operations and no-follow
+directory opens, available on Linux and macOS. On platforms without those
+capabilities, `init` and `export` report an error instead of using unsafe
+path-based writes. The project root and its ancestors must remain under the
+operator's control; moving an already open directory is outside this guarantee.
+
 ---
 
 ## Core Concepts
