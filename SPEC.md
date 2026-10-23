@@ -394,9 +394,26 @@ casual edits. It is evidence, not protection.
 ### Observations (Read-Only)
 ```sql
 observations(repo, kind, identity, revision, observed, summary, action, url)
+observation_heads(repo, kind, identity, revision, changed)
 ```
 - `kind`: `issues`, `comments`, `pulls`, `review_comments`, `releases`, `runs`, `commits`, `events`
 - `action`: `investigate_failed_check`, `review_code_change`, `reconcile_ticket_change`, `review_external_feedback`, `verify_release_artifacts`, `inspect_repository_activity`
+- Revision rows retain their original observation timestamps. A head identifies
+  the last revision observed locally; it is not a live-state guarantee.
+  Revision insertion and head advancement commit atomically. Repeated identical
+  observations leave the head timestamp unchanged; reversions update the head
+  without rewriting history. Poll `changed` counts transitions from an existing
+  head, while status `changed` continues to report identities with revision history.
+- `observations()` returns history by default. `latest=True` selects heads before
+  applying kind/action filters and limits; intake uses this current view.
+- Migration is additive: create `observation_heads` and transactionally backfill
+  missing identities from the greatest `observed` time, breaking ties by rowid.
+  Existing heads are preserved on reopen. Older history cannot recover a reversion
+  that was never recorded as a separate revision; the next poll corrects its head.
+  Remote deletions and closures are never inferred from missing poll results.
+  The migration requires SQLite 3.25+ window functions and rejects older
+  engines before creating storage. Shared-database writers must be upgraded
+  together; mixed versions that do not maintain heads are unsupported.
 
 ### Outbox (Write Path)
 ```sql

@@ -270,6 +270,23 @@ prevents new duplicate issue/review intake; existing observations and
 already seeded tickets are retained. Bounded polling is not a complete
 inventory and may miss older items or transitions beyond the page cap.
 
+Intake considers only the last locally observed revision of each item.
+Older revisions remain available through `observations()`;
+`observations(..., latest=True)` selects the current observation before
+applying limits. Repeating an unchanged poll does not report another
+change, and a reversion to earlier content advances the current selection
+without rewriting historical evidence. A closed issue or successful run
+therefore cannot create work from an older open or failed revision.
+
+Existing sync databases gain an additive `observation_heads` table on open.
+Missing entries are backfilled from the newest historical observation,
+with insertion order breaking timestamp ties. Existing heads and revision
+rows are retained. Reversions that happened before this upgrade cannot be
+reconstructed until the item is observed again; absence from a bounded
+poll does not prove deletion or closure.
+This migration requires SQLite 3.25 or newer. Upgrade all writers sharing
+the sync database together; older versions do not advance observation heads.
+
 Workflow-run polling reads the `workflow_runs` array in GitHub's
 [repository workflow-runs response](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository).
 Malformed run envelopes fail the poll instead of appearing as an empty

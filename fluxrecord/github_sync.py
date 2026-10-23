@@ -85,6 +85,10 @@ CREATE TABLE IF NOT EXISTS observations (
     action TEXT NOT NULL, url TEXT NOT NULL DEFAULT '',
     ticket TEXT, actor TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (repo, kind, identity, revision));
+CREATE TABLE IF NOT EXISTS observation_heads (
+    repo TEXT NOT NULL, kind TEXT NOT NULL, identity TEXT NOT NULL,
+    revision TEXT NOT NULL, changed REAL NOT NULL,
+    PRIMARY KEY (repo, kind, identity));
 CREATE TABLE IF NOT EXISTS outbox (
     repo TEXT NOT NULL, issue INTEGER NOT NULL, key TEXT NOT NULL,
     body_hash TEXT NOT NULL, marker TEXT NOT NULL, state TEXT NOT NULL,
@@ -236,6 +240,8 @@ class GitHubSync:
     """Durable observations plus an idempotent outbox, backed by SQLite."""
 
     def __init__(self, db_path: str | Path, runner: Runner | None = None) -> None:
+        if sqlite3.sqlite_version_info < (3, 25, 0):
+            raise OSError("GitHub sync requires SQLite 3.25 or newer for observation migration")
         path = Path(db_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(path, timeout=10, isolation_level=None)
@@ -246,7 +252,36 @@ class GitHubSync:
         columns = {row["name"] for row in self.db.execute("PRAGMA table_info(observations)")}
         if "status" not in columns:
             self.db.execute("ALTER TABLE observations ADD COLUMN status TEXT NOT NULL DEFAULT ''")
+        try:
+            self._backfill_heads()
+        except BaseException:
+            self.db.close()
+            raise
         self._run: Runner = runner if runner is not None else _gh_json
+
+    def _backfill_heads(self) -> None:
+        """Add missing heads from legacy history without replacing live heads.
+
+        Older databases only retain the first observation of each revision.
+        Their most recently observed row, with rowid breaking timestamp ties,
+        is the best recoverable head. A past reversion cannot be recovered.
+        """
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            self.db.execute(
+                "INSERT OR IGNORE INTO observation_heads(repo,kind,identity,revision,changed)"
+                " SELECT repo,kind,identity,revision,observed FROM ("
+                " SELECT o.repo,o.kind,o.identity,o.revision,o.observed,"
+                " ROW_NUMBER() OVER (PARTITION BY o.repo,o.kind,o.identity"
+                " ORDER BY o.observed DESC,o.rowid DESC) AS position FROM observations o"
+                " WHERE NOT EXISTS (SELECT 1 FROM observation_heads h"
+                " WHERE h.repo=o.repo AND h.kind=o.kind AND h.identity=o.identity)"
+                ") WHERE position=1"
+            )
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
 
     def close(self) -> None:
         self.db.close()
@@ -260,36 +295,55 @@ class GitHubSync:
     # ------------------------------------------------------------------ read
 
     def _observe(self, repo: str, kind: str, record: dict[str, Any]) -> bool:
-        """Record one observation. Returns True when it changed something."""
+        """Retain a revision and atomically advance its last-observed head.
+
+        Returns True only for a transition from a previous current revision.
+        Missing or deleted remote entries are not inferred from poll absence.
+        """
         identity = _identity(kind, record)
         if not identity:
             return False
         revision = _revision(record)
-        known = self.db.execute(
-            "SELECT revision FROM observations WHERE repo=? AND kind=? AND identity=?",
-            (repo, kind, identity),
-        ).fetchall()
-        changed = any(row["revision"] != revision for row in known)
         actor = record.get("user") or record.get("actor") or {}
         login = actor.get("login", "") if isinstance(actor, dict) else ""
-        self.db.execute(
-            "INSERT OR IGNORE INTO observations"
-            "(repo,kind,identity,revision,observed,summary,action,url,ticket,actor,status)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                repo,
-                kind,
-                identity,
-                revision,
-                time.time(),
-                _summary(kind, record),
-                ACTIONS[kind],
-                str(record.get("html_url", "")),
-                _ticket_ref(record),
-                login,
-                _status(kind, record),
-            ),
-        )
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            known = self.db.execute(
+                "SELECT revision FROM observation_heads WHERE repo=? AND kind=? AND identity=?",
+                (repo, kind, identity),
+            ).fetchone()
+            changed = known is not None and known["revision"] != revision
+            observed = time.time()
+            self.db.execute(
+                "INSERT INTO observations"
+                "(repo,kind,identity,revision,observed,summary,action,url,ticket,actor,status)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+                " ON CONFLICT(repo,kind,identity,revision) DO NOTHING",
+                (
+                    repo,
+                    kind,
+                    identity,
+                    revision,
+                    observed,
+                    _summary(kind, record),
+                    ACTIONS[kind],
+                    str(record.get("html_url", "")),
+                    _ticket_ref(record),
+                    login,
+                    _status(kind, record),
+                ),
+            )
+            self.db.execute(
+                "INSERT INTO observation_heads(repo,kind,identity,revision,changed) VALUES (?,?,?,?,?)"
+                " ON CONFLICT(repo,kind,identity) DO UPDATE"
+                " SET revision=excluded.revision,changed=excluded.changed"
+                " WHERE observation_heads.revision<>excluded.revision",
+                (repo, kind, identity, revision, observed),
+            )
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
         return changed
 
     def poll(
@@ -362,17 +416,29 @@ class GitHubSync:
         kind: str | None = None,
         action: str | None = None,
         limit: int = 200,
+        latest: bool = False,
     ) -> list[dict[str, Any]]:
-        """What has been observed for a repository, newest first."""
-        query = "SELECT * FROM observations WHERE repo=?"
+        """Revision history, or last-observed heads with latest=True.
+
+        A head records the last state observed locally, not authoritative
+        live state. Its revision keeps its original observation timestamp.
+        """
+        query = "SELECT o.* FROM observations o"
+        if latest:
+            query += (
+                " JOIN observation_heads h ON h.repo=o.repo AND h.kind=o.kind"
+                " AND h.identity=o.identity AND h.revision=o.revision"
+            )
+        query += " WHERE o.repo=?"
         params: list[Any] = [repo]
         if kind:
-            query += " AND kind=?"
+            query += " AND o.kind=?"
             params.append(kind)
         if action:
-            query += " AND action=?"
+            query += " AND o.action=?"
             params.append(action)
-        query += " ORDER BY observed DESC, kind, identity LIMIT ?"
+        ordering = "h.changed" if latest else "o.observed"
+        query += f" ORDER BY {ordering} DESC, o.kind, o.identity LIMIT ?"
         params.append(limit)
         return [dict(row) for row in self.db.execute(query, params)]
 
