@@ -34,8 +34,11 @@
 ### GitHub Sync
 - Uses `gh` CLI only
 - No token in code
-- 30-second timeout
-- 16 MiB response limit
+- POSIX pipe selectors required (Linux/macOS); unsupported platforms fail before spawn
+- One 30-second deadline for output collection and normal child-exit waiting
+- 16 MiB stdout and 64 KiB stderr byte limits enforced while draining both streams
+- Oversize output, timeout and cancellation stop/reap the direct child and close pipes;
+  descendants are not supervised and process creation/final OS cleanup are not a hard deadline
 - Idempotency keys are plain tokens, so a key cannot break the marker
 
 ### Authentication

@@ -39,7 +39,7 @@ These are checked by tests, not by documentation alone.
 | The dashboard reads loopback only | Non-loopback origins are refused before a request is made |
 | The dashboard refuses redirects | A redirect is an error, not a follow |
 | The dashboard reads at most 8 MiB | A larger response is clipped and reported as clipped |
-| The GitHub sync talks to `gh` only | Fixed argv, no shell, 30 second timeout, 16 MiB response ceiling |
+| The GitHub sync talks to `gh` only | POSIX pipe selectors, fixed argv, no shell, 30 second collection/exit deadline, 16 MiB stdout and 64 KiB stderr ceilings enforced during reads; cleanup supervises the direct child |
 | No token is read or stored by the sync | The `gh` CLI holds the credentials; fluxrecord never sees them |
 | A ticket id cannot walk out of a directory | Ids are plain identifiers, and every exported path is checked |
 | Nothing is executed by the tooling inventory | The filesystem is read; nothing is run |

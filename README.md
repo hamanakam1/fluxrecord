@@ -301,6 +301,15 @@ report observations and outbox outcomes, not provider billing. Each call
 has its own timeout; a multi-page cycle has no aggregate deadline, and
 interrupting a write does not prove that GitHub rejected it.
 
+The real `gh` transport requires POSIX pipe selectors (Linux/macOS) and
+refuses unsupported platforms before spawning. It drains stdout and
+stderr together, stopping at 16 MiB of response bytes or 64 KiB of
+diagnostics; excessive diagnostics also fail an otherwise successful call.
+One 30-second deadline covers collection and waiting for normal child
+exit. Oversize output, timeout and cancellation stop and reap the directly
+launched child and close its pipes. Descendants are not supervised, and
+process creation or final OS cleanup is not a strict wall-clock guarantee.
+
 A queued comment carries a `<!-- fluxrecord:{key}:{digest} -->` marker.
 Before sending it, `publish` searches up to 20 pages of 100 issue comments
 for that marker, including the legacy `taskrivet` namespace. A matching

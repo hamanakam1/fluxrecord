@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import selectors
 import sqlite3
 import subprocess
 import time
@@ -46,6 +48,9 @@ MAX_KEY_LENGTH = 100
 MAX_COMMENT_PAGES = 20
 #: A response larger than this is refused rather than held in memory.
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+#: Diagnostics are bounded separately from the JSON response.
+_MAX_STDERR_BYTES = 64 * 1024
+_READ_CHUNK_BYTES = 64 * 1024
 
 #: The action each observation kind implies.
 ACTIONS: dict[str, str] = {
@@ -138,26 +143,69 @@ def is_published(comment_bodies: list[str], key: str, body_hash: str) -> bool:
 
 
 def _gh_json(args: list[str]) -> Any:
-    """Call the gh CLI and decode its JSON output."""
+    """Collect bounded output from one gh child on POSIX, then decode JSON.
+
+    Timeout, oversized output, and cancellation kill and reap this child;
+    arbitrary descendants are not supervised or signalled here.
+    """
+    if os.name != "posix":
+        raise OSError("gh transport requires POSIX pipe selectors")
+    stdout = bytearray()
+    stderr = bytearray()
+    deadline = time.monotonic() + TIMEOUT_SECONDS
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             ["gh", *args],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
     except FileNotFoundError as exc:
         raise OSError("the gh CLI is required for GitHub sync but was not found") from exc
+    try:
+        assert process.stdout is not None and process.stderr is not None
+        with selectors.DefaultSelector() as selector:
+            selector.register(
+                process.stdout, selectors.EVENT_READ, (stdout, MAX_RESPONSE_BYTES, "response")
+            )
+            selector.register(
+                process.stderr, selectors.EVENT_READ, (stderr, _MAX_STDERR_BYTES, "stderr")
+            )
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise OSError(f"gh timed out after {TIMEOUT_SECONDS}s")
+                for key, _ in selector.select(remaining):
+                    buffer, limit, label = key.data
+                    chunk = os.read(key.fd, min(_READ_CHUNK_BYTES, limit + 1 - len(buffer)))
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    buffer.extend(chunk)
+                    if len(buffer) > limit:
+                        raise OSError(f"gh {label} exceeded {limit} bytes; refused")
+        # A child can close its pipes and keep running, so the same deadline
+        # must cover waiting for exit as well as collecting its output.
+        process.wait(timeout=max(0, deadline - time.monotonic()))
     except subprocess.TimeoutExpired as exc:
         raise OSError(f"gh timed out after {TIMEOUT_SECONDS}s") from exc
-    if result.returncode != 0:
-        detail = result.stderr.strip().splitlines()
-        reason = detail[0] if detail else f"exit {result.returncode}"
+    finally:
+        try:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+        finally:
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()
+    if process.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip().splitlines()
+        reason = detail[0] if detail else f"exit {process.returncode}"
         raise OSError(f"gh {args[0]} failed: {reason[:200]}")
-    if len(result.stdout) > MAX_RESPONSE_BYTES:
-        raise OSError(f"gh response exceeded {MAX_RESPONSE_BYTES} bytes; refused")
-    text = result.stdout.strip()
+    try:
+        text = stdout.decode("utf-8").strip()
+    except UnicodeDecodeError as exc:
+        raise OSError("gh returned a response that was not UTF-8 JSON") from exc
     if not text:
         return None
     try:
