@@ -435,9 +435,9 @@ class Ledger:
         """The next free sequential ticket id, in the M-###### space."""
         highest = 0
         for row in self.db.execute("SELECT id FROM tasks"):
-            digits = str(row["id"])[2:]
-            if digits.isdigit():
-                highest = max(highest, int(digits))
+            match = re.fullmatch(r"M-([0-9]+)", str(row["id"]))
+            if match:
+                highest = max(highest, int(match.group(1)))
         return f"M-{highest + 1:06d}"
 
     def task_view(self, task_id: str) -> dict[str, Any]:
@@ -491,18 +491,20 @@ class Ledger:
         ):
             for value in values or []:
                 required(value, f"{name} entry")
-        if seed_key:
-            seeded = self.db.execute(
-                "SELECT id FROM tasks WHERE seed_key=?", (seed_key,)
-            ).fetchone()
-            if seeded:
-                if seeded["id"] != task_id:
-                    raise ValueError(f"seed key already used by {seeded['id']}")
-                return self.task_view(task_id)
-        if self.db.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
-            raise ValueError(f"task already exists: {task_id}")
-        now = time.time()
         with self.transaction():
+            # Serialize identity checks with the insert so concurrent callers
+            # receive the same idempotent result or domain error as a retry.
+            if seed_key:
+                seeded = self.db.execute(
+                    "SELECT id FROM tasks WHERE seed_key=?", (seed_key,)
+                ).fetchone()
+                if seeded:
+                    if seeded["id"] != task_id:
+                        raise ValueError(f"seed key already used by {seeded['id']}")
+                    return self.task_view(task_id)
+            if self.db.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone():
+                raise ValueError(f"task already exists: {task_id}")
+            now = time.time()
             self.db.execute(
                 "INSERT INTO tasks(id,objective,acceptance,kind,scope,status,token_budget,"
                 "created,title,priority,tags,depends_on,blocks,owner,seed_key,updated_at)"
