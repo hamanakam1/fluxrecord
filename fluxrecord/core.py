@@ -117,6 +117,61 @@ def required(value: Any, name: str) -> None:
         raise ValueError(f"{name} must be nonempty text")
 
 
+def validate_task(
+    task_id: str,
+    objective: str,
+    acceptance: str,
+    kind: str = "code",
+    scope: list[str] | None = None,
+    token_budget: int = 8000,
+    title: str = "",
+    priority: int = 2,
+    tags: list[str] | None = None,
+    depends_on: list[str] | None = None,
+    blocks: list[str] | None = None,
+    owner: str = "",
+    seed_key: str = "",
+) -> None:
+    """Validate task fields without reading or writing a ledger.
+
+    The signature matches add_task so import previews can validate the
+    same payload. Existing IDs and seed keys are checked by the caller.
+    """
+    for value, name in [
+        (task_id, "id"),
+        (objective, "objective"),
+        (acceptance, "acceptance"),
+        (kind, "kind"),
+    ]:
+        required(value, name)
+    if not _TASK_ID.fullmatch(task_id) or task_id in (".", ".."):
+        raise ValueError(
+            "id must be a plain identifier such as M-397001; it cannot contain path separators"
+        )
+    if kind not in TASK_KINDS:
+        raise ValueError(f"kind must be one of {', '.join(TASK_KINDS)}")
+    positive(token_budget, "token_budget")
+    if token_budget > 2**63 - 1:
+        raise ValueError("token_budget must fit in a signed 64-bit integer")
+    if type(priority) is not int or priority not in (1, 2, 3):
+        raise ValueError("priority must be 1, 2, or 3")
+    if seed_key and len(seed_key) > 100:
+        raise ValueError("seed_key must be at most 100 characters")
+    if scope is None:
+        scope = [task_id]
+    if not isinstance(scope, list) or not scope:
+        raise ValueError("scope must be a nonempty list of resource keys")
+    for key in scope:
+        required(key, "scope key")
+    for name, values in (
+        ("tags", tags),
+        ("depends_on", depends_on),
+        ("blocks", blocks),
+    ):
+        for value in values or []:
+            required(value, f"{name} entry")
+
+
 class Ledger:
     def __init__(
         self,
@@ -466,37 +521,23 @@ class Ledger:
         owner: str = "",
         seed_key: str = "",
     ) -> dict[str, Any]:
-        for value, name in [
-            (task_id, "id"),
-            (objective, "objective"),
-            (acceptance, "acceptance"),
-            (kind, "kind"),
-        ]:
-            required(value, name)
-        if not _TASK_ID.fullmatch(task_id) or task_id in (".", ".."):
-            raise ValueError(
-                "id must be a plain identifier such as M-397001; it cannot contain path separators"
-            )
-        if kind not in TASK_KINDS:
-            raise ValueError(f"kind must be one of {', '.join(TASK_KINDS)}")
-        positive(token_budget, "token_budget")
-        if type(priority) is not int or priority not in (1, 2, 3):
-            raise ValueError("priority must be 1, 2, or 3")
-        if seed_key and len(seed_key) > 100:
-            raise ValueError("seed_key must be at most 100 characters")
+        validate_task(
+            task_id=task_id,
+            objective=objective,
+            acceptance=acceptance,
+            kind=kind,
+            scope=scope,
+            token_budget=token_budget,
+            title=title,
+            priority=priority,
+            tags=tags,
+            depends_on=depends_on,
+            blocks=blocks,
+            owner=owner,
+            seed_key=seed_key,
+        )
         if scope is None:
             scope = [task_id]
-        if not isinstance(scope, list) or not scope:
-            raise ValueError("scope must be a nonempty list of resource keys")
-        for key in scope:
-            required(key, "scope key")
-        for name, values in (
-            ("tags", tags),
-            ("depends_on", depends_on),
-            ("blocks", blocks),
-        ):
-            for value in values or []:
-                required(value, f"{name} entry")
         if seed_key:
             seeded = self.db.execute(
                 "SELECT id FROM tasks WHERE seed_key=?", (seed_key,)

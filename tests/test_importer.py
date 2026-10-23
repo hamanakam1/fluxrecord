@@ -186,6 +186,104 @@ class ImporterTest(unittest.TestCase):
         self.assertEqual(self.ledger.events(), events)
         self.assertEqual(self.ledger.sessions()[0]["status"], "active")
 
+    def test_invalid_rows_do_not_claim_ids_before_valid_rows(self):
+        self.csv.write_text(
+            "ID,Description,AcceptanceCriteria,Kind\n"
+            "M-000001,Same objective,Same acceptance,unknown-kind\n"
+            "M-000001,Same objective,Same acceptance,code\n"
+            "M-000001,Another objective,Another acceptance,code\n"
+        )
+        for reassign in (False, True):
+            with self.subTest(reassign=reassign):
+                with Ledger(self.root / f"invalid-kind-{reassign}.sqlite") as ledger:
+                    preview = import_csv(ledger, self.csv, dry_run=True, reassign=reassign)
+                    self.assertEqual(ledger.list_tasks(), [])
+                    self.assertEqual(ledger.events(), [])
+                    result = import_csv(ledger, self.csv, reassign=reassign)
+                    self.assertEqual(preview | {"dry_run": False}, result)
+                    self.assertEqual(len(result["skipped"]), 1)
+                    self.assertIn("kind", result["skipped"][0]["reason"])
+                    self.assertEqual(result["duplicates"], [])
+                    self.assertEqual(ledger.task_view("M-000001")["kind"], "code")
+
+    def test_invalid_source_rows_do_not_reserve_reassignment_ids(self):
+        long_id = "M-" + "9" * 100
+        self.csv.write_text(
+            "ID,Description,AcceptanceCriteria,Kind\n"
+            "M-999999,Invalid kind,Done,unknown-kind\n"
+            "M-888888,Missing acceptance,,code\n"
+            "../escape,Invalid identifier,Done,code\n"
+            f"{long_id},Oversized seed,Done,code\n"
+            "M-000001,Replacement,Replacement acceptance,code\n"
+        )
+        original = self.ledger.add_task("M-000001", "Original", "Original acceptance")
+        events = self.ledger.events()
+        preview = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+        self.assertEqual(self.ledger.events(), events)
+        self.assertEqual(self.ledger.task_view("M-000001"), original)
+        result = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(preview | {"dry_run": False}, result)
+        self.assertEqual(result["imported"], ["M-000002"])
+        self.assertEqual(len(result["skipped"]), 4)
+        self.assertEqual(result["reassigned"][0]["to"], "M-000002")
+
+    def test_dry_run_validates_the_default_kind(self):
+        preview = import_csv(self.ledger, self.csv, kind="unknown-kind", dry_run=True)
+        self.assertEqual(self.ledger.list_tasks(), [])
+        result = import_csv(self.ledger, self.csv, kind="unknown-kind")
+        self.assertEqual(preview | {"dry_run": False}, result)
+        self.assertEqual(result["imported_count"], 0)
+        self.assertEqual(len(result["skipped"]), 2)
+
+    def test_reassignment_validates_its_actual_seed_for_a_long_existing_id(self):
+        task_id = "a" * 100
+        original = self.ledger.add_task(task_id, "Original", "Original acceptance")
+        self.csv.write_text(
+            f"ID,Description,AcceptanceCriteria\n{task_id},Replacement,Replacement acceptance\n"
+        )
+        preview = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+        result = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(preview | {"dry_run": False}, result)
+        self.assertEqual(result["imported"], ["M-000001"])
+        self.assertEqual(self.ledger.task_view(task_id), original)
+        again = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(again["unchanged"], ["M-000001"])
+
+    def test_invalid_budgets_are_skipped_before_reassignment_allocation(self):
+        self.ledger.add_task("M-000001", "Original", "Original acceptance")
+        for budget in (str(2**63), "²"):
+            with self.subTest(budget=budget):
+                self.csv.write_text(
+                    "ID,Description,AcceptanceCriteria,TokenBudget\n"
+                    f"M-999999,Invalid budget,Done,{budget}\n"
+                    "M-000001,Replacement,Replacement acceptance,100\n"
+                )
+                preview = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+                result = import_csv(self.ledger, self.csv, reassign=True)
+                self.assertEqual(preview | {"dry_run": False}, result)
+                self.assertEqual(len(result["skipped"]), 1)
+                self.assertEqual(result["reassigned"][0]["to"], "M-000002")
+        with self.assertRaisesRegex(ValueError, "token_budget"):
+            self.ledger.add_task("oversized", "Objective", "Acceptance", token_budget=2**63)
+        largest = self.ledger.add_task("largest", "Objective", "Acceptance", token_budget=2**63 - 1)
+        self.assertEqual(largest["token_budget"], 2**63 - 1)
+
+    def test_conflicting_normal_seed_is_skipped_without_reserving_an_id(self):
+        self.ledger.add_task("original", "Original", "Keep", seed_key="csv:M-999999")
+        self.ledger.add_task("M-000001", "Original", "Original acceptance")
+        self.csv.write_text(
+            "ID,Description,AcceptanceCriteria\n"
+            "M-999999,Conflicting seed,Done\n"
+            "M-000001,Replacement,Replacement acceptance\n"
+        )
+        preview = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+        result = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(preview | {"dry_run": False}, result)
+        self.assertEqual(result["imported"], ["M-000002"])
+        self.assertEqual(
+            result["skipped"], [{"id": "M-999999", "reason": "seed key already used by original"}]
+        )
+
     def test_only_ticket_ids_count_as_dependencies(self):
         self.csv.write_text(
             HEADER + "M-397001,Core,Split core,P0,Inf,fluxrecord/core.py,"

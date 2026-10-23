@@ -29,6 +29,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .core import validate_task
+
 __all__ = ["import_csv", "read_rows"]
 
 _ALIASES: dict[str, tuple[str, ...]] = {
@@ -84,6 +86,12 @@ def _next_id(used: set[str]) -> str:
     return f"M-{highest + 1:06d}"
 
 
+def _reassignment_seed(task_id: str, objective: str, acceptance: str) -> str:
+    identity = (task_id, objective, acceptance)
+    digest = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
+    return f"csv:reassigned:{digest}"
+
+
 def import_csv(
     ledger: Any,
     path: str | Path,
@@ -116,7 +124,8 @@ def import_csv(
         for task in ledger.db.execute("SELECT id,objective,acceptance,title,seed_key FROM tasks")
     }
     seeded = {task["seed_key"]: task for task in tasks.values() if task["seed_key"]}
-    used = set(tasks) | {_pick(row, "id") for row in rows}
+    source_tasks = dict(tasks)
+    prepared: list[dict[str, Any]] = []
 
     for row in rows:
         task_id = _pick(row, "id")
@@ -142,7 +151,15 @@ def import_csv(
         if label:
             tags.append(label.lower())
         budget = _pick(row, "token_budget")
-        token_budget = int(budget) if budget.isdigit() and int(budget) > 0 else 8000
+        token_budget = 8000
+        if budget.isdigit():
+            try:
+                parsed_budget = int(budget)
+            except ValueError:
+                skipped.append({"id": task_id, "reason": "token_budget must be a positive integer"})
+                continue
+            if parsed_budget > 0:
+                token_budget = parsed_budget
 
         payload: dict[str, Any] = {
             "task_id": task_id,
@@ -161,7 +178,37 @@ def import_csv(
             "owner": _pick(row, "owner"),
             "seed_key": f"csv:{task_id}",
         }
+        source_task = source_tasks.get(task_id)
+        if source_task is not None:
+            # Existing IDs can be longer than a normal CSV seed permits.
+            # Validate the seed the operation will actually use instead.
+            payload["seed_key"] = source_task["seed_key"]
+            if reassign and (source_task["objective"], source_task["acceptance"]) != (
+                objective,
+                acceptance,
+            ):
+                payload["seed_key"] = _reassignment_seed(task_id, objective, acceptance)
+        try:
+            validate_task(**payload)
+        except ValueError as exc:
+            skipped.append({"id": task_id, "reason": str(exc)})
+            continue
+        seed_owner = seeded.get(payload["seed_key"])
+        if source_task is None and seed_owner is not None:
+            skipped.append(
+                {"id": task_id, "reason": f"seed key already used by {seed_owner['id']}"}
+            )
+            continue
+        prepared.append(payload)
+        source_tasks.setdefault(task_id, payload)
 
+    # An invalid row cannot claim an ID, count as a duplicate, or move the
+    # next reassignment. Both preview and execution use these same rows.
+    used = set(tasks) | {payload["task_id"] for payload in prepared}
+    for payload in prepared:
+        task_id = payload["task_id"]
+        objective = payload["objective"]
+        acceptance = payload["acceptance"]
         fingerprint = (objective, acceptance)
         identity = (task_id, objective, acceptance)
         if identity in seen:
@@ -183,8 +230,7 @@ def import_csv(
                     }
                 )
                 continue
-            digest = hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
-            payload["seed_key"] = f"csv:reassigned:{digest}"
+            payload["seed_key"] = _reassignment_seed(*identity)
             previous = seeded.get(payload["seed_key"])
             if (
                 previous is not None
@@ -200,6 +246,12 @@ def import_csv(
                 )
                 continue
             fresh = str(previous["id"]) if previous is not None else _next_id(used)
+            payload = payload | {"task_id": fresh}
+            try:
+                validate_task(**payload)
+            except ValueError as exc:
+                skipped.append({"id": task_id, "reason": str(exc)})
+                continue
             reassigned.append({"from": task_id, "to": fresh, "title": payload["title"]})
             if previous is not None:
                 unchanged.append(fresh)
@@ -207,7 +259,6 @@ def import_csv(
                 continue
             used.add(fresh)
             task_id = fresh
-            payload["task_id"] = fresh
 
         if not dry_run:
             try:
