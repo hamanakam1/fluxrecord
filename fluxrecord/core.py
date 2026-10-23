@@ -656,7 +656,7 @@ class Ledger:
                     tokens,
                     fingerprint,
                     stagnant,
-                    time.time() + lease_seconds,
+                    max(session["lease_until"], time.time() + lease_seconds),
                     "blocked" if blocked else "active",
                     sid,
                 ),
@@ -706,7 +706,7 @@ class Ledger:
         positive(lease_seconds, "lease_seconds")
         with self.transaction():
             session = self._session(sid)
-            until = time.time() + lease_seconds
+            until = max(session["lease_until"], time.time() + lease_seconds)
             self.db.execute("UPDATE sessions SET lease_until=? WHERE id=?", (until, sid))
             self._touch(session["task_id"])
             self.event("session.renewed", session["task_id"], session=sid, lease_until=until)
@@ -755,7 +755,7 @@ class Ledger:
         with self.transaction():
             session = self._session(sid)
             previous = str(session["owner"])
-            until = time.time() + 900
+            until = max(session["lease_until"], time.time() + 900)
             self.db.execute(
                 "UPDATE sessions SET owner=?, lease_until=? WHERE id=?", (owner, until, sid)
             )

@@ -437,6 +437,9 @@ flux adopt <session_id> --owner terminal-2 --reason "the old worker is gone"
 Both are recorded in the event log, with the reason, because a lease that
 changes hands without a reason is one nobody can explain later.
 
+Renewal, adoption, and checkpoints preserve an existing later lease deadline.
+A shorter requested extension cannot make a long lease expire early.
+
 ### Watching, Without a Server
 
 The roadmap asked for WebSocket updates. A socket means a server, a port, an
