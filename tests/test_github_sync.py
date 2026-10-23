@@ -74,6 +74,93 @@ class GitHubSyncTest(unittest.TestCase):
         self.assertEqual(result["by_kind"]["issues"], 2)
         self.assertEqual(self.sync.status("owner/repo")["observations"]["issues"], 2)
 
+    def test_missing_or_malformed_identities_do_not_create_observations(self):
+        for kind, field in (
+            ("issues", "number"),
+            ("pulls", "number"),
+            ("comments", "id"),
+            ("review_comments", "id"),
+            ("releases", "id"),
+            ("runs", "id"),
+            ("events", "id"),
+            ("commits", "sha"),
+        ):
+            records = [
+                {},
+                *({field: value} for value in (None, True, False, [], {}, [1], {"id": 1})),
+            ]
+            for record in records:
+                with self.subTest(kind=kind, record=record):
+                    self.assertFalse(self.sync._observe("owner/repo", kind, record))
+                    self.assertEqual(self.sync.observations("owner/repo"), [])
+                    self.assertEqual(
+                        self.sync.db.execute("SELECT COUNT(*) FROM observation_heads").fetchone()[
+                            0
+                        ],
+                        0,
+                    )
+
+    def test_github_numeric_identities_require_positive_integers_or_decimal_strings(self):
+        for kind, field in (("issues", "number"), ("comments", "id"), ("releases", "id")):
+            for value in (0, -1, 1.5, "", " ", "0", "000", "-1", "1.5", "abc", "²"):
+                with self.subTest(kind=kind, value=value):
+                    self.sync._observe("owner/repo", kind, {field: value})
+                    self.assertEqual(self.sync.observations("owner/repo"), [])
+            for value in (1, 123456789, "2", "003"):
+                with self.subTest(kind=kind, value=value):
+                    self.sync._observe("valid/repo", kind, {field: value})
+            self.assertEqual(
+                {row["identity"] for row in self.sync.observations("valid/repo", kind=kind)},
+                {"1", "123456789", "2", "003"},
+            )
+
+    def test_release_tags_remain_a_fallback_for_unavailable_numeric_ids(self):
+        for identifier in (None, False, [], {}):
+            with self.subTest(identifier=identifier):
+                self.sync._observe(
+                    "owner/repo", "releases", {"id": identifier, "tag_name": "v1.2.3"}
+                )
+        self.sync._observe("owner/repo", "releases", {"tag_name": "release/2026.10"})
+        self.sync._observe("owner/repo", "releases", {"id": 7, "tag_name": "v7"})
+        self.assertEqual(
+            {row["identity"] for row in self.sync.observations("owner/repo")},
+            {"v1.2.3", "release/2026.10", "7"},
+        )
+
+    def test_long_numeric_identity_strings_need_no_integer_conversion(self):
+        from fluxrecord.github_sync import _numeric_identity
+
+        value = "0" * 5000 + "1"
+        self.assertEqual(_numeric_identity(value), value)
+        self.assertEqual(_numeric_identity("0" * 5000), "")
+        self.assertEqual(_numeric_identity("1" * 20000 + "x"), "")
+
+    def test_release_tag_fallback_requires_nonblank_text(self):
+        for tag in (None, False, [], {}, 7, "", " "):
+            with self.subTest(tag=tag):
+                self.sync._observe("owner/repo", "releases", {"tag_name": tag})
+                self.assertEqual(self.sync.observations("owner/repo"), [])
+
+    def test_commit_sha_requires_nonblank_text_and_retains_its_stored_prefix(self):
+        for sha in (None, False, [], {}, 7, "", " "):
+            with self.subTest(sha=sha):
+                self.sync._observe("owner/repo", "commits", {"sha": sha})
+                self.assertEqual(self.sync.observations("owner/repo"), [])
+        self.sync._observe("owner/repo", "commits", {"sha": "abcdef1234567890"})
+        self.assertEqual(self.sync.observations("owner/repo")[0]["identity"], "abcdef123456")
+
+    def test_poll_and_intake_ignore_invalid_identities_and_keep_valid_records(self):
+        from fluxrecord.core import Ledger
+        from fluxrecord.intake import intake
+
+        self.gh.issues = [issue(None), issue(True), issue({}), issue(12)]
+        self.sync.poll("owner/repo", kinds=["issues"])
+        self.assertEqual([row["identity"] for row in self.sync.observations("owner/repo")], ["12"])
+        with Ledger(Path(self.temp.name) / "intake.sqlite") as ledger:
+            result = intake(ledger, self.sync, "owner/repo", kinds=["issues"])
+            self.assertEqual(result["created_count"], 1)
+            self.assertEqual(ledger.status()["tasks"][0]["seed_key"], "gh:owner/repo#issues#12")
+
     def test_poll_detects_a_changed_revision(self):
         self.sync.poll("owner/repo")
         self.gh.issues = [

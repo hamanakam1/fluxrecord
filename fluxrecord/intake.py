@@ -26,6 +26,7 @@ from .github_sync import KINDS
 __all__ = ["intake", "intake_dashboard", "ACTIONS", "actionable"]
 
 _TICKET_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_ID_ATTEMPTS = 8
 
 #: What each action means for a ticket: its priority, and how to phrase it.
 ACTIONS: dict[str, dict[str, Any]] = {
@@ -87,6 +88,15 @@ def _is_ticket_id(candidate: str) -> bool:
     return bool(_TICKET_ID.fullmatch(candidate))
 
 
+def _dashboard_identity(value: Any) -> str:
+    """Retain string and integer ids without inventing ids from other types."""
+    if isinstance(value, str):
+        return value.strip()
+    if type(value) is int:
+        return str(value)
+    return ""
+
+
 def _evidence(repo: str, observation: dict[str, Any]) -> str:
     """The observation, as context a worker can read."""
     return json.dumps(
@@ -104,6 +114,39 @@ def _evidence(repo: str, observation: dict[str, Any]) -> str:
         ensure_ascii=False,
         indent=2,
     )
+
+
+def _add_generated_task(
+    ledger: Any,
+    objective: str,
+    acceptance: str,
+    *,
+    seed_key: str,
+    **fields: Any,
+) -> dict[str, Any] | None:
+    """Create with an unreserved id, retrying only concurrent id collisions.
+
+    A seed claimed by another intake is already handled. Invalid task
+    fields still fail immediately, and contention cannot retry forever.
+    """
+    for _ in range(_ID_ATTEMPTS):
+        if ledger.task_by_seed_key(seed_key) is not None:
+            return None
+        task_id = ledger.next_ticket_id()
+        try:
+            task: dict[str, Any] = ledger.add_task(
+                task_id, objective, acceptance, seed_key=seed_key, **fields
+            )
+            return task
+        except ValueError as exc:
+            seeded = ledger.task_by_seed_key(seed_key)
+            if seeded is not None and str(exc) == f"seed key already used by {seeded['id']}":
+                return None
+            if str(exc) != f"task already exists: {task_id}":
+                raise
+            if seeded is not None:
+                return None
+    raise ValueError(f"could not allocate a ticket id after {_ID_ATTEMPTS} attempts")
 
 
 def intake(
@@ -192,10 +235,9 @@ def intake(
                 "acceptance": "The observation is reviewed and the outcome is recorded.",
             },
         )
-        task_id = ledger.next_ticket_id()
         try:
-            ledger.add_task(
-                task_id,
+            task = _add_generated_task(
+                ledger,
                 phrasing["objective"].format(summary=observation["summary"]),
                 phrasing["acceptance"],
                 kind="code",
@@ -209,6 +251,10 @@ def intake(
         except ValueError as exc:
             skipped.append({"identity": observation["identity"], "reason": str(exc)})
             continue
+        if task is None:
+            skipped.append({"identity": observation["identity"], "reason": "already seeded"})
+            continue
+        task_id = str(task["id"])
         ledger.add_context(task_id, evidence, f"github:{kind}", priority=10, ttl=86400)
         created.append({"ticket": task_id, "key": key, "action": action})
 
@@ -250,7 +296,7 @@ def intake_dashboard(
         if not isinstance(entry, dict):
             continue
         seen += 1
-        external_id = str(entry.get("id", "")).strip()
+        external_id = _dashboard_identity(entry.get("id"))
         title = str(entry.get("title", "")).strip() or external_id or "untitled"
         if not external_id:
             skipped.append({"title": title, "reason": "no id in the dashboard record"})
@@ -262,20 +308,26 @@ def intake_dashboard(
             continue
         priority = str(entry.get("priority", 2) or 2)
         try:
-            task = ledger.add_task(
-                external_id if _is_ticket_id(external_id) else ledger.next_ticket_id(),
-                title,
-                f"The dashboard ticket {external_id} is reconciled and its outcome is recorded.",
-                kind="code",
-                scope=[f"dashboard:{external_id}"],
-                title=title,
-                priority=int(priority) if priority.isdigit() else 2,
-                tags=sorted({"dashboard", status} - {""}),
-                owner=str(entry.get("owner", "")),
-                seed_key=key,
-            )
+            fields: dict[str, Any] = {
+                "objective": title,
+                "acceptance": f"The dashboard ticket {external_id} is reconciled and its outcome is recorded.",
+                "kind": "code",
+                "scope": [f"dashboard:{external_id}"],
+                "title": title,
+                "priority": int(priority) if priority.isdigit() else 2,
+                "tags": sorted({"dashboard", status} - {""}),
+                "owner": str(entry.get("owner", "")),
+                "seed_key": key,
+            }
+            if _is_ticket_id(external_id):
+                task = ledger.add_task(external_id, **fields)
+            else:
+                task = _add_generated_task(ledger, **fields)
         except ValueError as exc:
             skipped.append({"title": title, "reason": str(exc)})
+            continue
+        if task is None:
+            skipped.append({"title": title, "reason": "already seeded"})
             continue
         created.append({"ticket": task["id"], "key": key, "status": status})
 

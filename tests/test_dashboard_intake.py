@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fluxrecord.core import Ledger
 from fluxrecord.intake import intake_dashboard
@@ -53,6 +54,41 @@ class DashboardIntakeTest(unittest.TestCase):
         result = intake_dashboard(self.ledger, PREVIEW, "http://127.0.0.1:8080")
         self.assertEqual(len(result["skipped"]), 1)
         self.assertIn("no id", result["skipped"][0]["reason"])
+
+    def test_null_boolean_and_container_ids_are_skipped_before_allocating(self):
+        for value in (None, True, False, [], {}, [1], {"id": 1}, 1.5, "", " "):
+            with self.subTest(value=value), patch.object(self.ledger, "next_ticket_id") as next_id:
+                result = intake_dashboard(
+                    self.ledger,
+                    {"tickets": [{"id": value, "title": "Malformed identity"}]},
+                    "http://127.0.0.1:8080",
+                )
+                self.assertEqual(result["created_count"], 0)
+                self.assertEqual(result["skipped_count"], 1)
+                next_id.assert_not_called()
+                self.assertEqual(self.ledger.status()["tasks"], [])
+
+    def test_nonblank_string_and_integer_dashboard_ids_remain_supported(self):
+        for value in (0, 17, -7, "M-500002", "external/12", "  EXT-17  ", "None"):
+            with self.subTest(value=value):
+                result = intake_dashboard(
+                    self.ledger,
+                    {"tickets": [{"id": value, "title": "Valid identity"}]},
+                    "http://127.0.0.1:8080",
+                )
+                self.assertEqual(result["created_count"], 1)
+                key = f"dashboard:http://127.0.0.1:8080#{str(value).strip()}"
+                self.assertIsNotNone(self.ledger.task_by_seed_key(key))
+
+    def test_a_null_id_cannot_reserve_an_explicit_string_id(self):
+        result = intake_dashboard(
+            self.ledger,
+            {"tickets": [{"id": None, "title": "Malformed"}, {"id": "None", "title": "Valid"}]},
+            "http://127.0.0.1:8080",
+        )
+        self.assertEqual(result["created_count"], 1)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertEqual(self.ledger.task_view("None")["title"], "Valid")
 
     def test_the_statuses_are_summarised(self):
         result = intake_dashboard(self.ledger, PREVIEW, "http://127.0.0.1:8080")

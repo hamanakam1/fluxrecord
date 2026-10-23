@@ -170,14 +170,29 @@ def _validate_repo(repo: str) -> None:
         raise ValueError("repo must be owner/name")
 
 
+def _numeric_identity(value: Any) -> str:
+    """A positive JSON integer or positive ASCII decimal string, never a bool."""
+    if type(value) is int:
+        return str(value) if value > 0 else ""
+    if isinstance(value, str) and value.isascii() and value.isdecimal() and value.strip("0"):
+        return value
+    return ""
+
+
+def _text_identity(value: Any) -> str:
+    """A nonblank string identity; arbitrary values are not identifiers."""
+    return value if isinstance(value, str) and value.strip() else ""
+
+
 def _identity(kind: str, record: dict[str, Any]) -> str:
+    """Numeric object ids, release-tag fallback, or a string commit SHA."""
     if kind in ("issues", "pulls"):
-        return str(record.get("number", ""))
+        return _numeric_identity(record.get("number"))
     if kind == "releases":
-        return str(record.get("id") or record.get("tag_name", ""))
+        return _numeric_identity(record.get("id")) or _text_identity(record.get("tag_name"))
     if kind == "commits":
-        return str(record.get("sha", ""))[:12]
-    return str(record.get("id", ""))
+        return _text_identity(record.get("sha"))[:12]
+    return _numeric_identity(record.get("id"))
 
 
 def _summary(kind: str, record: dict[str, Any]) -> str:

@@ -264,6 +264,15 @@ want to intake first. The additive [current-observation migration](docs/github-s
 preserves history and waits for fresh observations before making it eligible
 for intake.
 
+GitHub numeric object identities must be positive integers or ASCII decimal
+strings. Releases may fall back to a nonblank tag, and commits require a
+nonblank SHA string. Malformed identities are skipped before storage or
+intake. Dashboard intake accepts nonblank string and integer IDs.
+
+Intake retries generated ticket-ID collisions up to eight times so concurrent
+imports can retain distinct work. Explicit dashboard ticket IDs are preserved;
+a conflict is reported without assigning the record a different identity.
+
 Writing is idempotent. A queued comment carries a
 `<!-- fluxrecord:{key}:{digest} -->` marker, and `publish` matches that
 marker before sending anything, so a retry confirms instead of
