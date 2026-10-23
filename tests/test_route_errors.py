@@ -90,6 +90,8 @@ class CycleConfigTest(unittest.TestCase):
         self.temp.cleanup()
 
     def write(self, payload):
+        if isinstance(payload, dict):
+            payload = {"sync_db": str(self.root / "github.sqlite"), **payload}
         self.config.write_text(json.dumps(payload))
         return str(self.config)
 

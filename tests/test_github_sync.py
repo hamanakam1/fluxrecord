@@ -1,8 +1,10 @@
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fluxrecord import github_cycle
 from fluxrecord.github_sync import (
@@ -151,13 +153,19 @@ class GitHubSyncTest(unittest.TestCase):
     def test_an_oversized_response_is_refused(self):
         from fluxrecord import github_sync
 
-        original = github_sync.MAX_RESPONSE_BYTES
-        github_sync.MAX_RESPONSE_BYTES = 10
-        try:
-            with self.assertRaises(OSError):
+        response = subprocess.CompletedProcess(
+            args=["gh", "api", "repos/owner/repo/issues"],
+            returncode=0,
+            stdout='[{"number": 7}]',
+            stderr="",
+        )
+        with (
+            mock.patch.object(github_sync, "MAX_RESPONSE_BYTES", 10),
+            mock.patch.object(github_sync.subprocess, "run", return_value=response) as run,
+        ):
+            with self.assertRaisesRegex(OSError, "exceeded 10 bytes"):
                 github_sync._gh_json(["api", "repos/owner/repo/issues"])
-        finally:
-            github_sync.MAX_RESPONSE_BYTES = original
+        run.assert_called_once()
 
     def test_marker_shape_matches_the_spec(self):
         marker = marker_for("summary", "a" * 64)

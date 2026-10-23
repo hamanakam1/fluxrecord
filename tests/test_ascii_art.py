@@ -37,16 +37,22 @@ class AsciiArtTest(unittest.TestCase):
         self.assertEqual(ascii_art.get_art("minimal"), "fluxrecord")
 
     def test_color_wraps_the_mark_in_ansi(self):
-        colored = ascii_art.get_art("large", color=True)
+        with mock.patch.dict(os.environ, {"NO_COLOR": "", "TERM": "xterm-256color"}):
+            colored = ascii_art.get_art("large", color=True)
         self.assertIn("\x1b[", colored)
         self.assertIn("\x1b[0m", colored)
 
     def test_color_is_skipped_when_no_color_is_set(self):
-        with mock.patch.dict(os.environ, {"NO_COLOR": "1"}):
+        with mock.patch.dict(os.environ, {"NO_COLOR": "1", "TERM": "xterm-256color"}):
+            self.assertEqual(ascii_art.get_art("large", color=True), ascii_art.ASCII_ART)
+
+    def test_color_is_skipped_for_a_dumb_terminal(self):
+        with mock.patch.dict(os.environ, {"NO_COLOR": "", "TERM": "dumb"}):
             self.assertEqual(ascii_art.get_art("large", color=True), ascii_art.ASCII_ART)
 
     def test_color_is_skipped_for_styles_without_a_color_form(self):
-        self.assertEqual(ascii_art.get_art("ascii", color=True), ascii_art.ASCII_ASCII)
+        with mock.patch.dict(os.environ, {"NO_COLOR": "", "TERM": "xterm-256color"}):
+            self.assertEqual(ascii_art.get_art("ascii", color=True), ascii_art.ASCII_ASCII)
 
     def test_cli_prints_the_requested_style(self):
         result = subprocess.run(
