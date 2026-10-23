@@ -584,6 +584,12 @@ tool that does not share the ledger can still read a ticket. The front
 matter is the frozen shape of the file, and it is validated against the
 published schema like everything else.
 
+Evidence-table cells escape pipes, backslashes, and HTML characters, and encode
+line breaks so one record stays on one row. An encoding comment marks these
+tables, allowing `flux read` to restore the text while preserving literal HTML
+in older files. Legacy backslash-escaped pipes remain readable. The front-matter
+schema is unchanged.
+
 ---
 
 ## Core Concepts

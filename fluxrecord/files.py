@@ -20,7 +20,9 @@ the ledger decides, these files explain.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,7 @@ TICKET_FIELDS = (
 )
 
 _LIST_FIELDS = ("scope", "tags", "depends_on", "blocks")
+_EVIDENCE_ENCODING = "<!-- fluxrecord:evidence-cells:v1 -->"
 
 
 def _inside(directory: Path, name: str) -> Path:
@@ -145,7 +148,7 @@ def _sections(body: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     name = ""
     lines: list[str] = []
-    for line in body.splitlines():
+    for line in body.split("\n"):
         if line.startswith("## "):
             if name:
                 sections[name] = "\n".join(lines)
@@ -171,11 +174,16 @@ def _dependencies(section: str) -> list[str]:
 def _evidence_log(section: str) -> list[dict[str, str]]:
     """The evidence log of a ticket file, as rows."""
     rows: list[dict[str, str]] = []
-    for line in section.splitlines():
+    encoded = _EVIDENCE_ENCODING in section.split("\n")
+    for line in section.split("\n"):
         line = line.strip()
         if not line.startswith("|"):
             continue
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        cells = [
+            cell.strip().replace(r"\|", "|") for cell in re.split(r"(?<!\\)\|", line.strip("|"))
+        ]
+        if encoded:
+            cells = [html.unescape(cell.replace("<br>", "\n")) for cell in cells]
         if len(cells) < 4 or cells[0].lower() == "timestamp":
             continue
         if all(set(cell) <= set("-: ") for cell in cells):
@@ -189,6 +197,17 @@ def _evidence_log(section: str) -> list[dict[str, str]]:
             }
         )
     return rows
+
+
+def _table_cell(value: Any) -> str:
+    """Escape evidence separators for a single Markdown table row."""
+    return (
+        html.escape(str(value), quote=False)
+        .replace("\\", "&#92;")
+        .replace("|", "&#124;")
+        .replace("\r", "&#13;")
+        .replace("\n", "<br>")
+    )
 
 
 def render_ticket(task: dict[str, Any], evidence: dict[str, Any]) -> str:
@@ -229,21 +248,24 @@ def render_ticket(task: dict[str, Any], evidence: dict[str, Any]) -> str:
     lines.append("")
     lines.append("## Evidence Log")
     lines.append("")
+    lines.append(_EVIDENCE_ENCODING)
+    lines.append("")
     lines.append("| Timestamp | Actor | Action | Evidence |")
     lines.append("|-----------|-------|--------|----------|")
     for event in evidence.get("events", []):
         data = event.get("data", {})
         actor = data.get("owner") or data.get("actor") or "operator"
         summary = data.get("reason") or data.get("summary") or data.get("evidence") or ""
-        lines.append(
-            f"| {_stamp(event.get('created'))} | {actor} | {event.get('type')} | {summary} |"
-        )
+        cells = (_stamp(event.get("created")), actor, event.get("type"), summary)
+        lines.append("| " + " | ".join(_table_cell(cell) for cell in cells) + " |")
     for checkpoint in evidence.get("checkpoints", []):
-        detail = str(checkpoint.get("evidence", "")).replace("|", "\\|")
-        lines.append(
-            f"| {_stamp(checkpoint.get('created'))} | {checkpoint.get('owner', 'worker')} "
-            f"| checkpoint | {checkpoint.get('summary', '')} — {detail} |"
+        cells = (
+            _stamp(checkpoint.get("created")),
+            checkpoint.get("owner", "worker"),
+            "checkpoint",
+            f"{checkpoint.get('summary', '')} — {checkpoint.get('evidence', '')}",
         )
+        lines.append("| " + " | ".join(_table_cell(cell) for cell in cells) + " |")
     lines.append("")
     lines.append("## Failures")
     lines.append("")
