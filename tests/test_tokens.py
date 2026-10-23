@@ -64,6 +64,17 @@ class TokenCommandTest(unittest.TestCase):
         report = introspect_token("not-a-token", SECRET)
         self.assertEqual(report, {"active": False})
 
+    def test_introspection_checks_the_expected_issuer_and_audience(self):
+        issued = issue_token("terminal-1", SECRET, issuer="issuer-a", audience="api-a")
+        self.assertTrue(
+            introspect_token(issued["token"], SECRET, issuer="issuer-a", audience="api-a")["active"]
+        )
+        for expected in ({"issuer": "issuer-b"}, {"audience": "api-b"}):
+            with self.subTest(expected=expected):
+                self.assertEqual(
+                    introspect_token(issued["token"], SECRET, **expected), {"active": False}
+                )
+
     def test_the_issuer_is_checked(self):
         issued = issue_token("terminal-1", SECRET, issuer="fluxrecord")
         self.assertFalse(verify_token(issued["token"], SECRET, issuer="other")["valid"])

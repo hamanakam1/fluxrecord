@@ -99,4 +99,4 @@ def introspect_token(
     """Describe a token the way RFC 7662 asks for."""
     from .auth import introspect
 
-    return introspect(token, secret)
+    return introspect(token, secret, issuer=issuer, audience=audience)

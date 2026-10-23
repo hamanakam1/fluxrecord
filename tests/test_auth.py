@@ -109,6 +109,39 @@ class VerifyTest(unittest.TestCase):
         with self.assertRaises(AuthError):
             verify(token, SECRET)
 
+    def test_a_token_cannot_be_used_before_its_not_before_claim(self):
+        token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": 1500})
+        with self.assertRaisesRegex(AuthError, "not valid yet"):
+            verify(token, SECRET, now=1000)
+
+    def test_not_before_uses_the_same_clock_leeway_as_issued_at(self):
+        for not_before in (999, 1000, 1030, 1030.0):
+            with self.subTest(not_before=not_before):
+                token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": not_before})
+                self.assertEqual(verify(token, SECRET, now=1000).subject, "terminal-1")
+        for not_before in (1031, 1030.5):
+            with self.subTest(not_before=not_before):
+                token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": not_before})
+                with self.assertRaises(AuthError):
+                    verify(token, SECRET, now=1000)
+
+    def test_a_malformed_not_before_claim_is_refused(self):
+        for not_before in (
+            None,
+            True,
+            False,
+            "1000",
+            [],
+            {},
+            float("nan"),
+            float("inf"),
+            -float("inf"),
+        ):
+            with self.subTest(not_before=not_before):
+                token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": not_before})
+                with self.assertRaisesRegex(AuthError, "not-before"):
+                    verify(token, SECRET, now=1000)
+
     def test_the_issuer_must_match(self):
         token, _ = issue("terminal-1", SECRET, issuer="someone-else")
         with self.assertRaises(AuthError):
@@ -142,6 +175,17 @@ class IntrospectTest(unittest.TestCase):
     def test_an_expired_token_is_inactive(self):
         token, _ = issue("terminal-1", SECRET, ttl_seconds=60, now=int(time.time()) - 3600)
         self.assertFalse(introspect(token, SECRET)["active"])
+
+    def test_introspection_checks_the_expected_issuer_and_audience(self):
+        token, _ = issue("terminal-1", SECRET, issuer="issuer-a", audience="api-a")
+        self.assertTrue(introspect(token, SECRET, issuer="issuer-a", audience="api-a")["active"])
+        for expected in ({"issuer": "issuer-b"}, {"audience": "api-b"}):
+            with self.subTest(expected=expected):
+                self.assertEqual(introspect(token, SECRET, **expected), {"active": False})
+
+    def test_introspection_reports_a_future_not_before_claim_as_inactive(self):
+        token, _ = issue("terminal-1", SECRET, now=1000, extra={"nbf": 1500})
+        self.assertEqual(introspect(token, SECRET, now=1000), {"active": False})
 
 
 class MiddlewareTest(unittest.TestCase):
@@ -271,6 +315,14 @@ class RoutesTest(unittest.TestCase):
         self.assertEqual(report.status, 200)
         self.assertTrue(report.body["active"])
         self.assertEqual(report.body["sub"], "terminal-1")
+
+    def test_introspect_rejects_tokens_for_another_issuer_or_audience(self):
+        for issuer, audience in (("other-issuer", "api"), ("fluxrecord", "other-api")):
+            with self.subTest(issuer=issuer, audience=audience):
+                token, _ = issue("terminal-1", SECRET, issuer=issuer, audience=audience)
+                response = self.routes.handle("POST", "/api/auth/introspect", {"token": token})
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.body, {"active": False})
 
     def test_logout_revokes_every_token_it_is_given(self):
         login = self.routes.handle(
