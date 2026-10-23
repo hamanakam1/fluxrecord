@@ -4,6 +4,8 @@ import base64
 import json
 import time
 import unittest
+from types import MappingProxyType
+from unittest.mock import Mock
 
 from fluxrecord.auth import (
     AuthError,
@@ -242,6 +244,39 @@ class RoutesTest(unittest.TestCase):
     def test_login_without_a_body_is_a_bad_request(self):
         response = self.routes.handle("POST", "/api/auth/login", {})
         self.assertEqual(response.status, 400)
+
+    def test_non_mapping_bodies_are_bad_requests_without_side_effects(self):
+        verifier = Mock(return_value=("read",))
+        self.routes.verify_credentials = verifier
+        for route in ("login", "refresh", "revoke", "introspect", "logout"):
+            for body in (False, 0, 1, "", "bad", [], [1], [("tokens", [])]):
+                with self.subTest(route=route, body=body):
+                    response = self.routes.handle("POST", f"/api/auth/{route}", body)
+                    self.assertEqual(response.status, 400)
+                    self.assertEqual(response.headers["Content-Type"], "application/problem+json")
+                    self.assertTrue(response.body["type"].endswith("/invalid-request"))
+        verifier.assert_not_called()
+        self.assertEqual(len(self.routes.revoked), 0)
+
+    def test_login_requires_nonempty_string_credentials(self):
+        verifier = Mock(return_value=("read",))
+        self.routes.verify_credentials = verifier
+        for field in ("username", "password"):
+            for value in (None, False, True, 0, 1, 1.5, [], {}, ""):
+                with self.subTest(field=field, value=value):
+                    body = {"username": "terminal-1", "password": "good", field: value}
+                    response = self.routes.handle("POST", "/api/auth/login", body)
+                    self.assertEqual(response.status, 400)
+                    self.assertTrue(response.body["type"].endswith("/invalid-request"))
+        verifier.assert_not_called()
+
+    def test_dispatch_preserves_mapping_and_omitted_body_support(self):
+        body = MappingProxyType({"username": "terminal-1", "password": "good"})
+        response = self.routes.handle("POST", "/api/auth/login", body)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(dict(body), {"username": "terminal-1", "password": "good"})
+        self.assertEqual(self.routes.handle("POST", "/api/auth/login").status, 400)
+        self.assertEqual(self.routes.handle("POST", "/api/auth/logout").status, 200)
 
     def test_a_refresh_token_buys_a_new_pair(self):
         login = self.routes.handle(

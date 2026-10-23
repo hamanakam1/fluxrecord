@@ -113,10 +113,17 @@ class AuthRoutes:
     # ---------------------------------------------------------------- routes
 
     def login(self, body: Mapping[str, Any]) -> Response:
-        username = str(body.get("username", ""))
-        password = str(body.get("password", ""))
-        if not username or not password:
-            return _problem(400, "invalid-request", "username and password are required")
+        username = body.get("username", "")
+        password = body.get("password", "")
+        if (
+            not isinstance(username, str)
+            or not username
+            or not isinstance(password, str)
+            or not password
+        ):
+            return _problem(
+                400, "invalid-request", "username and password must be nonempty strings"
+            )
         if self.verify_credentials is None:
             return _problem(500, "not-configured", "no credential verifier is configured")
         granted = self.verify_credentials(username, password)
@@ -143,8 +150,10 @@ class AuthRoutes:
             return _problem(exc.status, "invalid-token", exc.reason)
         if claims.token_type != "refresh":
             return _problem(400, "invalid-request", "token is not a refresh token")
-        # Rotation: the old refresh token is spent the moment a new one is issued.
-        self.revoked.revoke(claims.token_id)
+        # Spend atomically across every route sharing this denylist. Keep the
+        # token spent even if minting fails; restoring it would permit replay.
+        if not self.revoked.consume(claims.token_id):
+            return _problem(401, "invalid-token", "token revoked or missing token id")
         return Response(200, self._pair(claims.subject, claims.scopes))
 
     def revoke(self, body: Mapping[str, Any]) -> Response:
@@ -208,7 +217,9 @@ class AuthRoutes:
         headers: Mapping[str, Any] | None = None,
     ) -> Response:
         """Dispatch one request."""
-        payload = dict(body or {})
+        if body is not None and not isinstance(body, Mapping):
+            return _problem(400, "invalid-request", "body must be an object")
+        payload = dict(body) if body is not None else {}
         route = path.rstrip("/") or "/"
         if method.upper() != "POST":
             return _problem(405, "method-not-allowed", f"{method} is not allowed here")

@@ -24,6 +24,7 @@ import secrets
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any
 
 __all__ = [
@@ -101,20 +102,32 @@ class Claims:
 
 
 class RevocationList:
-    """Token ids that must not be accepted again."""
+    """Token ids that must not be accepted again, shared safely between threads."""
 
     def __init__(self) -> None:
         self._revoked: set[str] = set()
+        self._lock = Lock()
 
     def revoke(self, token_id: str) -> None:
         if token_id:
+            with self._lock:
+                self._revoked.add(token_id)
+
+    def consume(self, token_id: str) -> bool:
+        """Spend an unrevoked, nonempty token id exactly once."""
+        with self._lock:
+            if not token_id or token_id in self._revoked:
+                return False
             self._revoked.add(token_id)
+            return True
 
     def is_revoked(self, token_id: str) -> bool:
-        return token_id in self._revoked
+        with self._lock:
+            return token_id in self._revoked
 
     def __len__(self) -> int:
-        return len(self._revoked)
+        with self._lock:
+            return len(self._revoked)
 
 
 def issue(

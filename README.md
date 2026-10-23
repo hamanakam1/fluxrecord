@@ -390,6 +390,13 @@ with `hmac.compare_digest`; `exp`, `nbf`, `iss` and `aud` are checked on
 every verification; refresh tokens rotate and are spent once; and every
 token carries a `jti`, so it can be revoked.
 
+Refresh consumption is atomic among callers sharing one `RevocationList`,
+including multiple route objects in the same process. The list is in memory;
+separate lists, processes, and restarts do not share revocations. A failed
+replacement-token mint leaves the old refresh token spent and requires a fresh
+login. Request bodies must be objects, and login credentials must be nonempty
+strings; invalid types are rejected before credential verification.
+
 ---
 
 ## The Board
