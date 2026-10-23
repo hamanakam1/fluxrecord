@@ -76,6 +76,105 @@ class ImporterTest(unittest.TestCase):
         self.assertNotEqual(fresh, "M-397001")
         self.assertEqual(self.ledger.task_view(fresh)["title"], "JWT auth")
 
+    def test_reassignment_reserves_ids_from_alias_headers(self):
+        for alias in ("id", "ticket", "ticket_id", "key", " ID "):
+            with self.subTest(alias=alias):
+                self.csv.write_text(
+                    f"{alias},title,acceptance\n"
+                    "M-397001,First,Done\n"
+                    "M-397001,Second,Done\n"
+                    "M-000001,Third,Done\n"
+                )
+                result = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+                self.assertEqual(result["imported"], ["M-397001", "M-397002", "M-000001"])
+                self.assertEqual(
+                    result["reassigned"],
+                    [{"from": "M-397001", "to": "M-397002", "title": "Second"}],
+                )
+
+    def test_existing_source_id_conflicts_are_reported(self):
+        self.ledger.add_task("M-397001", "Existing work", "Existing acceptance")
+        before = self.ledger.status()
+        self.csv.write_text("ID,title,acceptance\nM-397001,New work,Done\n")
+        result = import_csv(self.ledger, self.csv)
+        self.assertEqual(result["imported_count"], 0)
+        self.assertEqual(result["unchanged"], [])
+        self.assertEqual(len(result["conflicts"]), 1)
+        self.assertEqual(result["conflicts"][0]["id"], "M-397001")
+        self.assertIn("ledger", result["conflicts"][0]["reason"])
+        self.assertEqual(self.ledger.status(), before)
+
+    def test_existing_source_id_can_be_reassigned_without_overwriting_it(self):
+        self.ledger.add_task("M-397001", "Existing work", "Existing acceptance")
+        original = self.ledger.task_view("M-397001")
+        self.csv.write_text("ID,title,acceptance\nM-397001,New work,Done\n")
+        result = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(result["imported"], ["M-397002"])
+        self.assertEqual(self.ledger.task_view("M-397001"), original)
+        self.assertEqual(self.ledger.task_view("M-397002")["objective"], "New work")
+
+    def test_reassignment_skips_occupied_candidates_and_remains_idempotent(self):
+        self.ledger.add_task("M-397002", "Existing work", "Existing acceptance")
+        original = self.ledger.task_view("M-397002")
+        self.csv.write_text("ID,title,acceptance\nM-397001,First,Done\nM-397001,Second,Done\n")
+        first = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(first["imported"], ["M-397001", "M-397003"])
+        self.assertEqual(self.ledger.task_view("M-397002"), original)
+        self.assertEqual(self.ledger.task_view("M-397003")["objective"], "Second")
+        before = self.ledger.status()
+        second = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(second["imported_count"], 0)
+        self.assertEqual(second["unchanged"], first["imported"])
+        self.assertEqual(second["reassigned"], first["reassigned"])
+        self.assertEqual(self.ledger.status(), before)
+
+    def test_reassignment_reuses_matching_legacy_csv_seeds(self):
+        self.ledger.add_task("M-397001", "First", "Done", seed_key="csv:M-397001")
+        self.ledger.add_task("M-397002", "Second", "Done", seed_key="csv:M-397002")
+        self.csv.write_text("ID,title,acceptance\nM-397001,First,Done\nM-397001,Second,Done\n")
+        before = self.ledger.status()
+        result = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(result["imported_count"], 0)
+        self.assertEqual(result["unchanged"], ["M-397001", "M-397002"])
+        self.assertEqual(self.ledger.status(), before)
+
+    def test_matching_unseeded_candidate_is_not_claimed_as_a_previous_import(self):
+        self.ledger.add_task("M-397002", "Second", "Done")
+        self.csv.write_text("ID,title,acceptance\nM-397001,First,Done\nM-397001,Second,Done\n")
+        result = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(result["imported"], ["M-397001", "M-397003"])
+        self.assertEqual(self.ledger.task_view("M-397002")["seed_key"], "")
+
+    def test_repeated_reassigned_row_is_a_duplicate(self):
+        self.csv.write_text(
+            "ID,title,acceptance\nM-397001,First,Done\nM-397001,Second,Done\nM-397001,Second,Done\n"
+        )
+        first = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(first["imported"], ["M-397001", "M-397002"])
+        self.assertEqual(first["duplicates"], ["M-397001"])
+        second = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(second["imported_count"], 0)
+        self.assertEqual(second["unchanged"], first["imported"])
+        self.assertEqual(second["duplicates"], first["duplicates"])
+
+    def test_dry_run_resolves_existing_collisions_like_a_real_import(self):
+        self.ledger.add_task("M-397001", "Existing work", "Existing acceptance")
+        self.ledger.add_task("M-397003", "Occupied candidate", "Done")
+        self.csv.write_text(
+            "ticket_id,title,acceptance\n"
+            "M-397001,First,Done\nM-397001,Second,Done\nM-397002,Third,Done\n"
+        )
+        before = self.ledger.status()
+        preview = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+        self.assertEqual(self.ledger.status(), before)
+        actual = import_csv(self.ledger, self.csv, reassign=True)
+        self.assertEqual(actual["imported"], ["M-397004", "M-397005", "M-397002"])
+        self.assertEqual({**preview, "dry_run": False}, actual)
+        again = import_csv(self.ledger, self.csv, dry_run=True, reassign=True)
+        self.assertEqual(again["imported_count"], 0)
+        self.assertEqual(again["unchanged"], actual["imported"])
+        self.assertEqual(again["reassigned"], actual["reassigned"])
+
     def test_only_ticket_ids_count_as_dependencies(self):
         self.csv.write_text(
             HEADER + "M-397001,Core,Split core,P0,Inf,fluxrecord/core.py,"

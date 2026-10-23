@@ -101,7 +101,8 @@ def import_csv(
     duplicates: list[str] = []
     reassigned: list[dict[str, str]] = []
     seen: dict[str, tuple[str, str, str]] = {}
-    used = {str(row.get("ID", "")).strip() for row in rows}
+    resolved_rows: set[tuple[str, str, str]] = set()
+    used = {_pick(row, "id") for row in rows}
 
     for row in rows:
         task_id = _pick(row, "id")
@@ -148,46 +149,62 @@ def import_csv(
         }
 
         fingerprint = (objective, acceptance)
-        if task_id in seen:
-            if seen[task_id][:2] == fingerprint:
-                duplicates.append(task_id)
-                continue
-            if not reassign:
-                conflicts.append(
-                    {
-                        "id": task_id,
-                        "title": payload["title"],
-                        "reason": "this id is already used by a different ticket in the same file",
-                        "held": seen[task_id][2],
-                    }
-                )
-                continue
-            fresh = _next_id(used)
-            used.add(fresh)
-            reassigned.append({"from": task_id, "to": fresh, "title": payload["title"]})
-            task_id = fresh
-            payload["task_id"] = fresh
-            payload["seed_key"] = f"csv:{fresh}"
-
-        if dry_run:
-            imported.append(task_id)
-            seen[task_id] = (objective, acceptance, payload["title"])
+        row_identity = (task_id, objective, acceptance)
+        if row_identity in resolved_rows:
+            duplicates.append(task_id)
             continue
         try:
             existing = ledger.task_view(task_id)
         except ValueError:
             existing = None
+        held = seen.get(task_id)
+        if held is None and existing is not None:
+            held = (existing["objective"], existing["acceptance"], existing["title"])
+        if held is not None and held[:2] != fingerprint:
+            if not reassign:
+                location = "the same file" if task_id in seen else "the ledger"
+                conflicts.append(
+                    {
+                        "id": task_id,
+                        "title": payload["title"],
+                        "reason": f"this id is already used by a different ticket in {location}",
+                        "held": held[2],
+                    }
+                )
+                continue
+            while True:
+                fresh = _next_id(used)
+                used.add(fresh)
+                try:
+                    existing = ledger.task_view(fresh)
+                except ValueError:
+                    existing = None
+                # Preserve legacy csv:<assigned-id> seeds on repeated imports,
+                # while stepping past unrelated work already using a candidate.
+                if existing is None or (
+                    existing.get("seed_key") == f"csv:{fresh}"
+                    and (existing["objective"], existing["acceptance"]) == fingerprint
+                ):
+                    break
+            reassigned.append({"from": task_id, "to": fresh, "title": payload["title"]})
+            task_id = fresh
+            payload["task_id"] = fresh
+            payload["seed_key"] = f"csv:{fresh}"
+
         if existing is not None:
             unchanged.append(task_id)
             seen[task_id] = (objective, acceptance, payload["title"])
+            resolved_rows.add(row_identity)
             continue
-        try:
-            ledger.add_task(**payload)
-        except ValueError as exc:
-            skipped.append({"id": task_id, "reason": str(exc)})
-            continue
+        if not dry_run:
+            try:
+                ledger.add_task(**payload)
+            except ValueError as exc:
+                skipped.append({"id": task_id, "reason": str(exc)})
+                continue
         imported.append(task_id)
         seen[task_id] = (objective, acceptance, payload["title"])
+        resolved_rows.add(row_identity)
 
     return {
         "source": str(path),
