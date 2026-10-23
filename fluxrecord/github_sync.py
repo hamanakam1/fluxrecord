@@ -5,8 +5,8 @@ Boundary rules, enforced here rather than assumed:
 
   - the ``gh`` CLI is the only way out; no token is read, stored, or logged
   - every call uses a fixed argv (no shell) and a 30 second timeout
-  - writes are idempotent: a body carries a marker that is matched before
-    anything is sent, so a retry never double-posts
+  - a body carries a marker checked over bounded, validated comment pages
+    before sending; run one publisher at a time for retry deduplication
   - observations are evidence about a repository, never authority to act
 
 The observation table keeps every revision it has seen, so a change is a
@@ -31,6 +31,7 @@ __all__ = [
     "KINDS",
     "TIMEOUT_SECONDS",
     "MAX_KEY_LENGTH",
+    "MAX_COMMENT_PAGES",
     "MARKER_NAMESPACE",
     "LEGACY_MARKER_NAMESPACE",
     "marker_for",
@@ -41,6 +42,8 @@ __all__ = [
 
 TIMEOUT_SECONDS = 30
 MAX_KEY_LENGTH = 100
+#: Bound marker discovery; an incomplete search must never permit a write.
+MAX_COMMENT_PAGES = 20
 #: A response larger than this is refused rather than held in memory.
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
@@ -426,11 +429,31 @@ class GitHubSync:
             "state": "pending",
         }
 
-    def _comments(self, repo: str, issue: int) -> list[dict[str, Any]]:
-        payload = self._run(["api", f"repos/{repo}/issues/{issue}/comments?per_page=100"])
-        if not isinstance(payload, list):
-            return []
-        return [item for item in payload if isinstance(item, dict)]
+    def _has_marker(self, repo: str, issue: int, key: str, body_hash: str) -> bool:
+        """Find a marker, or establish absence over a complete bounded lookup.
+
+        A found marker is sufficient even on a full page. Absence requires
+        a short final page; malformed or capped results leave the outbox
+        unchanged so an incomplete lookup cannot authorize a duplicate.
+        """
+        endpoint = f"repos/{repo}/issues/{issue}/comments"
+        for page in range(1, MAX_COMMENT_PAGES + 1):
+            query = "per_page=100" if page == 1 else f"per_page=100&page={page}"
+            payload = self._run(["api", f"{endpoint}?{query}"])
+            if (
+                not isinstance(payload, list)
+                or len(payload) > 100
+                or any(
+                    not isinstance(item, dict) or not isinstance(item.get("body"), str)
+                    for item in payload
+                )
+            ):
+                raise OSError("gh returned a malformed issue comments page")
+            if is_published([item["body"] for item in payload], key, body_hash):
+                return True
+            if len(payload) < 100:
+                return False
+        raise OSError(f"comment marker lookup exceeded {MAX_COMMENT_PAGES} pages")
 
     def publish(self, repo: str, limit: int = 20) -> dict[str, Any]:
         """Publish queued comments, skipping anything already marked."""
@@ -445,12 +468,11 @@ class GitHubSync:
         for row in rows[:limit]:
             marker = marker_for(row["key"], row["body_hash"])
             try:
-                existing = self._comments(repo, int(row["issue"]))
+                found = self._has_marker(repo, int(row["issue"]), row["key"], row["body_hash"])
             except OSError:
                 failed.append(row["key"])
                 continue
-            bodies = [str(comment.get("body", "")) for comment in existing]
-            if is_published(bodies, row["key"], row["body_hash"]):
+            if found:
                 self._set_state(repo, int(row["issue"]), row["key"], "confirmed")
                 confirmed.append(row["key"])
                 continue
@@ -472,8 +494,8 @@ class GitHubSync:
             "sent": sent,
             "confirmed": confirmed,
             "failed": failed,
-            "pending": len(rows) - len(sent) - len(confirmed) - len(failed),
-            "note": "Comments carry an idempotency marker; a marked comment is never resent.",
+            "pending": len(rows) - len(sent) - len(confirmed),
+            "note": "Comments carry a retry marker; incomplete lookups remain pending.",
         }
 
     def reconcile(self, repo: str) -> dict[str, Any]:
@@ -487,12 +509,11 @@ class GitHubSync:
         missing: list[str] = []
         for row in rows:
             try:
-                existing = self._comments(repo, int(row["issue"]))
+                found = self._has_marker(repo, int(row["issue"]), row["key"], row["body_hash"])
             except OSError:
                 missing.append(row["key"])
                 continue
-            bodies = [str(comment.get("body", "")) for comment in existing]
-            if is_published(bodies, row["key"], row["body_hash"]):
+            if found:
                 self._set_state(repo, int(row["issue"]), row["key"], "confirmed")
                 confirmed.append(row["key"])
             else:

@@ -408,7 +408,15 @@ outbox(repo, issue, key, body_hash, state, url)
 - The namespace was `taskrivet` before the rename. That form is still
   read, so a comment published by an earlier version of this tool is
   recognised and never sent twice; it is never written.
-- Reconciliation: reads comments, matches marker + actor, never blindly resends
+- Marker lookup: reads at most 20 pages of 100 issue comments, accepting
+  only arrays of objects with string bodies. A matching current or legacy
+  marker confirms publication; a short final page establishes absence.
+  Errors, malformed pages and a full final page at the cap leave the row
+  unresolved. Reconciliation uses the same lookup and never resends.
+- Failed publication attempts remain pending and count toward `pending`.
+- Run one publisher at a time. Marker discovery and posting are separate
+  requests; concurrent publication and changes between pages are not an
+  exactly-once delivery guarantee.
 
 ---
 

@@ -258,12 +258,17 @@ comment, release, run, commit and event, each implying one of six actions.
 The `gh` CLI is the only way out — no token is read or stored anywhere, and
 every call is bounded by a 30 second timeout.
 
-Writing is idempotent. A queued comment carries a
-`<!-- fluxrecord:{key}:{digest} -->` marker, and `publish` matches that
-marker before sending anything, so a retry confirms instead of
-double-posting. The namespace used to be `taskrivet`; that form is still
-read, so a comment published by an earlier version is recognised and
-never sent twice.
+A queued comment carries a `<!-- fluxrecord:{key}:{digest} -->` marker.
+Before sending it, `publish` searches up to 20 pages of 100 issue comments
+for that marker, including the legacy `taskrivet` namespace. A matching
+marker confirms the comment without another write. A failed or malformed
+page, or reaching the cap without finding a marker or the end of the list,
+leaves the comment pending. Failed attempts remain included in the reported
+pending count. Reconciliation uses the same bounded lookup.
+
+This supports retries after an interrupted publication. Run one publisher
+at a time: lookup and posting are separate requests, and GitHub comment
+pages are not a consistent snapshot during concurrent edits or deletions.
 
 ```bash
 flux github-poll --repo owner/repo
