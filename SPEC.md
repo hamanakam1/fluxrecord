@@ -288,10 +288,17 @@ Every packet carries `packet_hash`: the SHA-256 of its canonical JSON. The
 same ticket at the same state always produces the same hash, so an
 unchanged packet can be reused instead of sent again.
 
-`flux pack <id> --since <hash>` returns only what changed since the
-packet with that address — the checkpoints that landed, the failures that
-were recorded, the context that was attached — and says so when nothing
-changed. The full packet is still the truth; the delta is what is new.
+`flux pack <id> --since <hash>` returns the current packet and a delta
+summary. Its `changed` flag is true exactly when the current `packet_hash`
+differs from the supplied hash. This includes context that expires or no
+longer fits the budget, changes to a context source, and changes to the
+ticket's owner, dependencies, or scope conflicts.
+
+The delta lists summarize new checkpoints, failures, and context, alongside
+status movement; they are not a complete patch of the previous packet.
+Those lists can be empty even when `changed` is true. The full packet is
+the authority for refreshing cached context. Clients using `--delta-only`
+must fetch the full packet with the same byte budget when it changes.
 
 ### Budget Policy
 

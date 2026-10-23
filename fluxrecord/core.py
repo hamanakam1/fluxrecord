@@ -1017,6 +1017,9 @@ class Ledger:
             packed = self.pack(task_id)
             packet = packed["packet"]
             digest = digest or str(packed["packet_hash"])
+        elif not digest:
+            encoded = json.dumps(packet, ensure_ascii=False, separators=(",", ":")).encode()
+            digest = "sha256:" + hashlib.sha256(encoded).hexdigest()
         known_context = set(json.loads(row["context_hashes"]))
         known_failures = set(json.loads(row["failure_fingerprints"]))
         known_checkpoint = row["checkpoint_id"] or 0
@@ -1045,7 +1048,9 @@ class Ledger:
         ]
         status = str(packet.get("status", ""))
         moved = bool(known_status) and known_status != status
-        changed = bool(new_checkpoints or new_failures or new_context or moved)
+        # The summary covers additions, but context can disappear or packet
+        # metadata can change without adding any of those entries.
+        changed = digest != since
         delta_packet = {
             "task_id": task_id,
             "status": status,

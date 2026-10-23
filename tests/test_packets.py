@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fluxrecord.core import Ledger
 
@@ -102,6 +103,86 @@ class DeltaTest(unittest.TestCase):
         again = self.ledger.pack("M-1", since=first["packet_hash"])
         self.assertTrue(again["delta"]["changed"])
         self.assertEqual(again["delta"]["delta"]["checkpoints"], [])
+
+    def test_expired_context_is_a_change_without_new_context(self):
+        with patch("fluxrecord.core.time.time", return_value=1000):
+            self.ledger.add_context("M-1", "temporary reference", "note", ttl=1)
+            first = self.ledger.pack("M-1")
+        with patch("fluxrecord.core.time.time", return_value=1002):
+            again = self.ledger.pack("M-1", since=first["packet_hash"])
+        self.assertEqual(len(first["packet"]["context"]), 1)
+        self.assertEqual(again["packet"]["context"], [])
+        self.assertEqual(again["omitted"][0]["reason"], "expired")
+        self.assertNotEqual(first["packet_hash"], again["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertEqual(again["delta"]["delta"]["context"], [])
+
+    def test_a_smaller_budget_removing_context_is_a_change(self):
+        mandatory_bytes = self.ledger.pack("M-1")["packet_bytes"]
+        self.ledger.add_context("M-1", "x" * 1000, "note")
+        first = self.ledger.pack("M-1")
+        again = self.ledger.pack("M-1", max_bytes=mandatory_bytes, since=first["packet_hash"])
+        self.assertEqual(len(first["packet"]["context"]), 1)
+        self.assertEqual(again["packet"]["context"], [])
+        self.assertEqual(again["omitted"][0]["reason"], "byte_budget")
+        self.assertNotEqual(first["packet_hash"], again["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertEqual(again["delta"]["delta"]["context"], [])
+
+    def test_a_context_source_change_is_detected_for_the_same_body(self):
+        self.ledger.add_context("M-1", "reference", "old source")
+        first = self.ledger.pack("M-1")
+        self.ledger.add_context("M-1", "reference", "new source")
+        again = self.ledger.pack("M-1", since=first["packet_hash"])
+        self.assertEqual(again["packet"]["context"][0]["source"], "new source")
+        self.assertNotEqual(first["packet_hash"], again["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertEqual(again["delta"]["delta"]["context"], [])
+
+    def test_an_owner_handoff_is_a_change_without_a_status_change(self):
+        started = self.ledger.start("M-1", "terminal-1")
+        first = self.ledger.pack("M-1")
+        self.ledger.handoff(started["session_id"], "terminal-2", "Next worker")
+        again = self.ledger.pack("M-1", since=first["packet_hash"])
+        self.assertEqual(again["packet"]["owner"], "terminal-2")
+        self.assertNotEqual(first["packet_hash"], again["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertFalse(again["delta"]["status_changed"])
+
+    def test_a_new_scope_conflict_is_a_change(self):
+        self.ledger.add_task("M-2", "Other", "Acceptance", scope=["repo/x"])
+        first = self.ledger.pack("M-1")
+        self.ledger.start("M-2", "terminal-2")
+        again = self.ledger.pack("M-1", since=first["packet_hash"])
+        self.assertEqual(first["packet"]["scope_conflicts"], [])
+        self.assertEqual(len(again["packet"]["scope_conflicts"]), 1)
+        self.assertNotEqual(first["packet_hash"], again["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertFalse(again["delta"]["status_changed"])
+
+    def test_a_dependency_finishing_is_a_change(self):
+        self.ledger.add_task("M-2", "Dependency", "Acceptance", scope=["repo/y"])
+        self.ledger.add_task("M-3", "Dependent", "Acceptance", depends_on=["M-2"])
+        first = self.ledger.pack("M-3")
+        started = self.ledger.start("M-2", "terminal-2")
+        self.ledger.checkpoint(started["session_id"], "Done", "Verified", "Review", 10)
+        self.ledger.finish(started["session_id"], "Verified")
+        self.ledger.decide("M-2", "accept", "Verified")
+        again = self.ledger.pack("M-3", since=first["packet_hash"])
+        self.assertEqual(again["packet"]["dependencies"][0]["status"], "done")
+        self.assertNotEqual(first["packet_hash"], again["packet_hash"])
+        self.assertTrue(again["delta"]["changed"])
+        self.assertFalse(again["delta"]["status_changed"])
+
+    def test_a_supplied_packet_without_a_digest_gets_its_content_hash(self):
+        first = self.ledger.pack("M-1")
+        self.ledger.add_context("M-1", "reference", "note")
+        second = self.ledger.pack("M-1")
+        for packed, changed in ((first, False), (second, True)):
+            with self.subTest(changed=changed):
+                delta = self.ledger.delta("M-1", first["packet_hash"], packed["packet"])
+                self.assertEqual(delta["packet_hash"], packed["packet_hash"])
+                self.assertEqual(delta["changed"], changed)
 
     def test_an_unknown_hash_is_refused(self):
         with self.assertRaises(ValueError):

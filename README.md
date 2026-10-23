@@ -594,8 +594,8 @@ flux start M-397001 --owner terminal-1 --lease 900
 
 Every packet carries the hash of its content. The same ticket at the same
 state always produces the same hash, so an unchanged packet can be reused
-instead of sent again — and `flux pack --since <hash>` returns only what
-landed since the last one.
+instead of sent again — and `flux pack --since <hash>` returns the current
+packet and a compact delta summary.
 
 ```bash
 flux pack M-397001
@@ -607,9 +607,12 @@ flux pack M-397001 --since sha256:07b5a274...
 
 That is where *less repeated context* stops being a slogan and becomes a
 number: the delta is smaller than the packet, and the saving is the
-difference. The delta says what changed — the checkpoints that landed, the
-failures that were recorded, the context that was attached — and whether
-the ticket itself moved.
+difference. The delta summarizes new checkpoints, failures, and context,
+plus status movement. Its `changed` flag compares the full packet hashes,
+so expired or omitted context, owner changes, and dependency or scope changes
+also count. The lists can be empty when `changed` is true; use the full packet
+to refresh cached context. With `--delta-only`, fetch a full packet with the
+same byte budget when it changes.
 
 ### Measured, Not Claimed
 
