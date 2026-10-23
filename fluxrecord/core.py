@@ -178,16 +178,30 @@ class Ledger:
         path: str | Path,
         tokenizer: Callable[[str], int] | None = None,
         chain_key: str | bytes | None = None,
+        *,
+        read_only: bool = False,
     ) -> None:
         path = Path(path).expanduser()
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.db = sqlite3.connect(path, timeout=10, isolation_level=None)
+        self._read_only = read_only
         # A tokenizer is injected, never imported: the core stays stdlib-only
         # and the plug-in boundary stays a boundary.
         self.tokenizer = tokenizer
         # A chain key makes the event log tamper-evident. It is off by
         # default: a ledger that nobody signs is still a ledger.
         self.chain_key = chain_key
+        if read_only:
+            # Diagnostic readers must not create, chmod, migrate, or reconcile
+            # the ledger. URI encoding also preserves literal '?' and '#' paths.
+            self.db = sqlite3.connect(
+                path.absolute().as_uri() + "?mode=ro",
+                uri=True,
+                timeout=10,
+                isolation_level=None,
+            )
+            self.db.row_factory = sqlite3.Row
+            return
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.db = sqlite3.connect(path, timeout=10, isolation_level=None)
         try:
             self._prepare(path)
         except BaseException:
@@ -1518,7 +1532,8 @@ class Ledger:
         return {"checkpoints": checkpoints, "events": events, "failures": failures}
 
     def status(self) -> dict[str, Any]:
-        self.reconcile()
+        if not self._read_only:
+            self.reconcile()
         return {
             "tasks": [
                 self._decode(r) for r in self.db.execute("SELECT * FROM tasks ORDER BY created")

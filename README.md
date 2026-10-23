@@ -466,6 +466,22 @@ flux doctor --project .fluxrecord --dashboard http://127.0.0.1:8080
 It ends with notes rather than a verdict: what is blocked, what is
 waiting for review, what is stale, and which command would move it.
 
+Database diagnostics use read-only connections and one committed snapshot
+per database. They do not create or migrate schemas, change database file
+permissions, expire leases, or append failures and events. The report shows
+stored task and session states; run `flux reconcile` explicitly to expire
+leases. An incompatible or damaged schema is reported as an error without
+repair. Normal writable ledger opens retain their existing migrations.
+SQLite may still manage WAL shared-memory files during a read-only open;
+this is not a forensic filesystem snapshot. A dashboard HTTP probe is made
+only when `--dashboard` is supplied.
+
+Library diagnostics can open `Ledger(path, read_only=True)` for stored
+`status()` and event-chain verification without initialization or automatic
+reconciliation. Mutating methods remain unavailable on that connection.
+For multiple reads of one committed state, use an explicit SQLite read
+transaction as the doctor does.
+
 ---
 
 ## Many Workers, One Ledger

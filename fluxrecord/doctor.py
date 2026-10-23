@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any
@@ -41,12 +42,15 @@ def _ledger_report(db_path: str | Path) -> dict[str, Any]:
     try:
         from .secrets import event_chain_key
 
-        ledger = Ledger(db_path, chain_key=event_chain_key())
+        ledger = Ledger(path, chain_key=event_chain_key(), read_only=True)
     except Exception as exc:  # noqa: BLE001 - a report must not fail
         report["readable"] = False
         report["error"] = str(exc)
         return report
     try:
+        # All counts and chain checks describe one committed database state.
+        ledger.db.execute("BEGIN")
+        report["schema"] = ledger.schema_version()
         status = ledger.status()
         chain = ledger.verify_chain()
         tasks: dict[str, int] = {}
@@ -58,7 +62,6 @@ def _ledger_report(db_path: str | Path) -> dict[str, Any]:
         report.update(
             {
                 "readable": True,
-                "schema": ledger.schema_version(),
                 "tasks": tasks,
                 "task_count": len(status["tasks"]),
                 "sessions": sessions,
@@ -71,7 +74,7 @@ def _ledger_report(db_path: str | Path) -> dict[str, Any]:
                     "broken_at": chain["broken_at"],
                 },
                 "metrics": status["metrics"],
-                "bytes": Path(db_path).stat().st_size if Path(db_path).exists() else 0,
+                "bytes": path.stat().st_size,
             }
         )
     except Exception as exc:  # noqa: BLE001 - a report must not fail
@@ -108,8 +111,6 @@ def _project_report(project_dir: str | Path) -> dict[str, Any]:
 
 
 def _github_report(sync_db: str | Path) -> dict[str, Any]:
-    from .github_sync import GitHubSync
-
     report: dict[str, Any] = {"sync_db": str(sync_db)}
     gh = shutil.which("gh")
     report["gh_available"] = gh is not None
@@ -118,14 +119,18 @@ def _github_report(sync_db: str | Path) -> dict[str, Any]:
     report["sync_db_exists"] = path.exists()
     if not path.exists():
         return report
-    sync = None
+    database = None
     try:
-        sync = GitHubSync(path)
+        database = sqlite3.connect(
+            path.absolute().as_uri() + "?mode=ro", uri=True, timeout=10, isolation_level=None
+        )
+        database.row_factory = sqlite3.Row
+        database.execute("BEGIN")
         repos: dict[str, int] = {}
-        for row in sync.db.execute("SELECT repo, COUNT(*) AS n FROM observations GROUP BY repo"):
+        for row in database.execute("SELECT repo, COUNT(*) AS n FROM observations GROUP BY repo"):
             repos[row["repo"]] = row["n"]
         outbox: dict[str, int] = {}
-        for row in sync.db.execute("SELECT state, COUNT(*) AS n FROM outbox GROUP BY state"):
+        for row in database.execute("SELECT state, COUNT(*) AS n FROM outbox GROUP BY state"):
             outbox[row["state"]] = row["n"]
         report["observations"] = repos
         report["observation_count"] = sum(repos.values())
@@ -133,8 +138,8 @@ def _github_report(sync_db: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - a report must not fail
         report["error"] = str(exc)
     finally:
-        if sync is not None:
-            sync.close()
+        if database is not None:
+            database.close()
     return report
 
 
@@ -198,7 +203,12 @@ def diagnose(
     dashboard = _dashboard_report(dashboard_url)
 
     if not ledger.get("readable"):
-        notes.append("the ledger could not be read; run `flux init` to create one")
+        if ledger.get("exists"):
+            notes.append(
+                "the ledger could not be read; inspect the reported error before changing it"
+            )
+        else:
+            notes.append("the ledger could not be read; run `flux init` to create one")
     else:
         chain = ledger.get("chain", {})
         if chain.get("signed") and not chain.get("ok"):
