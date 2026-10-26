@@ -8,6 +8,14 @@ uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Actions are pinned, and the pin is checked.** Every third-party
+  `uses:` in `.github/workflows/` now references a full commit SHA with
+  the release it was reviewed at in a comment, so a moving tag cannot
+  silently swap the code that runs with the repository's secrets.
+  `tests/test_pinned_actions.py` enforces both halves — a floating tag
+  fails, an unannotated SHA fails — and runs as a named step in CI. The
+  checker has its own tests, including a synthetic workflow that violates
+  each rule.
 - **The long-term plan.** `PLAN.md` says how fluxrecord should be built: six
   phases with exit criteria that can be checked, the workstreams that run in
   parallel, the quality gates, the threat model, the risks, the open

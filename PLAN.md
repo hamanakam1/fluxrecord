@@ -26,6 +26,7 @@ are named in §5, and each one is a command in CI:
 | `tests/test_chain.py` | The event chain failing to notice an edit, a deletion, an insertion or a truncation |
 | `tests/test_published_schema.py` | The published schema describing the previous release instead of this one |
 | `conformance/run.py` | An implementation that does not produce the standard's shapes |
+| `tests/test_pinned_actions.py` | A workflow action referenced by a moving tag, or pinned to a SHA with no version to review it against |
 
 ---
 
