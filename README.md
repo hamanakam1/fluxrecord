@@ -186,6 +186,32 @@ Requires: **Python 3.11+**, `sqlite3` (stdlib)
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    subgraph Core["Core Ledger (Stdlib Only, Zero Dependencies)"]
+        CL["<b>fluxrecord.core</b><br/><i>tasks • sessions • checkpoints • profiles</i>"]
+        FS["<b>fluxrecord.files</b><br/><i>ticket files (.fluxrecord/ layout)</i>"]
+        CL <--> FS
+    end
+
+    subgraph Adapters["Enforced External Adapters"]
+        DB["<b>Dashboard</b><br/><i>loopback GET-only preview</i>"]
+        GH["<b>GitHub Sync</b><br/><i>durable observations & outbox via gh CLI</i>"]
+        TL["<b>Tools</b><br/><i>local executable inventory (read-only)</i>"]
+        AU["<b>Auth</b><br/><i>HS256 JWT stdlib tokens</i>"]
+    end
+
+    subgraph Interfaces["Surfaces"]
+        CLI["<b>flux CLI</b><br/><i>JSON-first coordination</i>"]
+    end
+
+    CLI --> CL
+    DB --> CL
+    GH <--> CL
+    TL --> CL
+    AU --> DB
+```
+
 ```
 fluxrecord/
 ├── fluxrecord/
