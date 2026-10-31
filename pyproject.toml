@@ -27,7 +27,7 @@ dependencies = []
 # request red for a change nobody made.
 dev = [
     "pytest==9.1.1",
-    "hypothesis==6.170.5",
+    "hypothesis==6.170.12",
     "mypy==2.4.0",
     "ruff==0.17.1",
     "coverage==7.10.7",
