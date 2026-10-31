@@ -29,7 +29,7 @@ dev = [
     "pytest==9.1.1",
     "hypothesis==6.170.5",
     "mypy==2.4.0",
-    "ruff==0.17.1",
+    "ruff==0.17.3",
     "coverage==7.10.7",
     "jsonschema==4.25.1",
 ]
