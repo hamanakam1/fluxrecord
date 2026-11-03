@@ -266,6 +266,16 @@ reuse 31 ids. A reused id is reported as a conflict rather than silently
 dropped; `--reassign` gives those rows a fresh sequential id instead and
 reports the old and new id for each.
 
+The standard backlog is the ai-dashboard repository's own `tickets.csv`, and
+its tickets are the standard this ledger imports against:
+
+```bash
+flux import --file /Users/michaelhamanaka/Projects/ai-dashboard/tickets.csv --reassign
+```
+
+The worked example above is the small local backlog; the ai-dashboard file is
+the canonical one, and the ledger holds what it seeds.
+
 ---
 
 ## GitHub Sync
